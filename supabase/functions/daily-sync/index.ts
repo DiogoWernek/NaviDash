@@ -1,3 +1,5 @@
+// @ts-nocheck — Este arquivo roda no Deno (Supabase Edge Functions), não no Node.js.
+// Os erros de "Cannot find module" e "Cannot find name 'Deno'" são falsos positivos do VS Code.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
