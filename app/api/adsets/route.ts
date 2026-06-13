@@ -47,8 +47,8 @@ async function handleReal(
     const dateParams = { since: startDate, until: endDate };
 
     const [adsetInsights, adInsightsData] = await Promise.all([
-      fetchAdSetInsights(account.meta_account_id, account.access_token, dateParams).catch(() => []),
-      fetchAdInsights(account.meta_account_id, account.access_token, dateParams).catch(() => []),
+      fetchAdSetInsights(account.meta_account_id, account.access_token, dateParams, campaignId).catch(() => []),
+      fetchAdInsights(account.meta_account_id, account.access_token, dateParams, campaignId).catch(() => []),
     ]);
 
     const adsets: AdSet[] = adsetInsights

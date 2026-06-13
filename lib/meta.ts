@@ -8,6 +8,7 @@ export interface MetaInsightsParams {
   timeIncrement?: number | "monthly" | "all_days";
   fields?: string[];
   breakdown?: string;
+  filtering?: string;
 }
 
 export interface MetaInsightsRaw {
@@ -72,6 +73,10 @@ export async function fetchInsights(
     searchParams.set("breakdowns", params.breakdown);
   }
 
+  if (params.filtering) {
+    searchParams.set("filtering", params.filtering);
+  }
+
   const url = `${META_API_BASE}/${accountId}/insights?${searchParams.toString()}`;
   const allData: MetaInsightsRaw[] = [];
 
@@ -133,27 +138,67 @@ export async function fetchCampaignInsights(
   });
 }
 
+const ADSET_FIELDS = [
+  "campaign_id",
+  "adset_id",
+  "adset_name",
+  "impressions",
+  "clicks",
+  "spend",
+  "reach",
+  "cpm",
+  "cpc",
+  "ctr",
+  "purchase_roas",
+  "actions",
+];
+
+const AD_FIELDS = [
+  "campaign_id",
+  "adset_id",
+  "ad_id",
+  "ad_name",
+  "impressions",
+  "clicks",
+  "spend",
+  "cpm",
+  "cpc",
+  "ctr",
+  "purchase_roas",
+  "actions",
+];
+
 export async function fetchAdSetInsights(
   accountId: string,
   accessToken: string,
-  params: { since: string; until: string }
+  params: { since: string; until: string },
+  campaignId?: string
 ): Promise<MetaInsightsRaw[]> {
   return fetchInsights(accountId, accessToken, {
     ...params,
     timeIncrement: "all_days" as const,
     level: "adset",
+    fields: ADSET_FIELDS,
+    filtering: campaignId
+      ? JSON.stringify([{ field: "campaign.id", operator: "EQUAL", value: campaignId }])
+      : undefined,
   });
 }
 
 export async function fetchAdInsights(
   accountId: string,
   accessToken: string,
-  params: { since: string; until: string }
+  params: { since: string; until: string },
+  campaignId?: string
 ): Promise<MetaInsightsRaw[]> {
   return fetchInsights(accountId, accessToken, {
     ...params,
     timeIncrement: "all_days" as const,
     level: "ad",
+    fields: AD_FIELDS,
+    filtering: campaignId
+      ? JSON.stringify([{ field: "campaign.id", operator: "EQUAL", value: campaignId }])
+      : undefined,
   });
 }
 

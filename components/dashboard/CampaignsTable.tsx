@@ -137,7 +137,7 @@ function AdSetRows({ adsets, loadingAdsets }: { adsets: AdSet[]; loadingAdsets: 
               <td className="px-3 py-2 text-right">
                 <span className="font-mono text-xs">{adset.cpa ? formatCurrency(adset.cpa) : "—"}</span>
               </td>
-              <td className="px-3 py-2 pr-4 text-right"><span className="font-mono text-xs">{formatRoas(adset.roas)}</span></td>
+              <td className="px-3 py-2 pr-4 text-right"><span className="font-mono text-xs">{adset.roas > 0 ? formatRoas(adset.roas) : <span className="text-muted-foreground">—</span>}</span></td>
             </tr>
             {isExpanded && adset.ads?.map((ad) => (
               <tr key={ad.id} className="border-b border-border/30 bg-muted/10 transition-colors hover:bg-muted/20">
@@ -155,7 +155,7 @@ function AdSetRows({ adsets, loadingAdsets }: { adsets: AdSet[]; loadingAdsets: 
                 <td className="px-3 py-2 text-right"><span className="font-mono text-xs">{formatPercent(ad.ctr)}</span></td>
                 <td className="px-3 py-2 text-right"><span className="font-mono text-xs">{formatCurrency(ad.cpm)}</span></td>
                 <td className="px-3 py-2 text-right"><span className="font-mono text-xs">{ad.cpa ? formatCurrency(ad.cpa) : "—"}</span></td>
-                <td className="px-3 py-2 pr-4 text-right"><span className="font-mono text-xs">{formatRoas(ad.roas)}</span></td>
+                <td className="px-3 py-2 pr-4 text-right"><span className="font-mono text-xs">{ad.roas > 0 ? formatRoas(ad.roas) : <span className="text-muted-foreground">—</span>}</span></td>
               </tr>
             ))}
           </React.Fragment>
@@ -394,29 +394,45 @@ export function CampaignsTable({ campaigns, loading, currentFilters }: Campaigns
                                 </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm font-semibold">{formatCurrency(campaign.spend)}</span>
+                                <span className={cn("font-mono text-sm font-semibold", campaign.spend === 0 && "text-muted-foreground")}>
+                                  {formatCurrency(campaign.spend)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm">{formatNumber(campaign.impressions)}</span>
+                                <span className="font-mono text-sm">
+                                  {campaign.spend === 0 ? <span className="text-muted-foreground">—</span> : formatNumber(campaign.impressions)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm">{formatNumber(campaign.clicks)}</span>
+                                <span className="font-mono text-sm">
+                                  {campaign.spend === 0 ? <span className="text-muted-foreground">—</span> : formatNumber(campaign.clicks)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm">{formatPercent(campaign.ctr)}</span>
+                                <span className="font-mono text-sm">
+                                  {campaign.spend === 0 ? <span className="text-muted-foreground">—</span> : formatPercent(campaign.ctr)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm">{formatCurrency(campaign.cpm)}</span>
+                                <span className="font-mono text-sm">
+                                  {campaign.spend === 0 ? <span className="text-muted-foreground">—</span> : formatCurrency(campaign.cpm)}
+                                </span>
                               </td>
                               <td className="px-3 py-3 text-right">
-                                <span className="font-mono text-sm">{cpa !== null ? formatCurrency(cpa) : "—"}</span>
+                                <span className="font-mono text-sm text-muted-foreground">
+                                  {cpa !== null ? formatCurrency(cpa) : "—"}
+                                </span>
                               </td>
                               <td className="px-3 py-3 pr-4 text-right">
-                                <span className={cn("font-mono text-sm font-semibold",
-                                  campaign.roas >= 3 ? "text-success" : campaign.roas >= 1 ? "text-foreground" : "text-danger"
-                                )}>
-                                  {formatRoas(campaign.roas)}
-                                </span>
+                                {campaign.spend === 0 || campaign.roas === 0 ? (
+                                  <span className="font-mono text-sm text-muted-foreground">—</span>
+                                ) : (
+                                  <span className={cn("font-mono text-sm font-semibold",
+                                    campaign.roas >= 3 ? "text-success" : campaign.roas >= 1 ? "text-foreground" : "text-danger"
+                                  )}>
+                                    {formatRoas(campaign.roas)}
+                                  </span>
+                                )}
                               </td>
                             </tr>
                             {isExpanded && (

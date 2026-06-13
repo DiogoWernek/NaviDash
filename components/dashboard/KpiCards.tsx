@@ -163,7 +163,7 @@ const KPI_DEFS = [
     label: "ROAS",
     tooltip: "Retorno sobre Investimento em Anúncios. Acima de 1,0x significa retorno positivo",
     icon: BarChart2,
-    format: formatRoas,
+    format: (v: number) => v > 0 ? formatRoas(v) : "—",
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
     higherIsBetter: true,
