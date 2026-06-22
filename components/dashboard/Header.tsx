@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CalendarIcon, ChevronDown, RefreshCw, Check, ArrowRight, Bot } from "lucide-react";
+import { CalendarIcon, ChevronDown, RefreshCw, Check, ArrowRight, Bot, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -19,10 +19,13 @@ interface HeaderProps {
   loading?: boolean;
   onSyncClick?: () => void;
   isSyncing?: boolean;
+  onExportCsv?: () => void;
+  hasData?: boolean;
 }
 
 const DATE_PRESETS = [
   { label: "Hoje", value: "today" },
+  { label: "1d", value: "1d" },
   { label: "7d", value: "7d" },
   { label: "30d", value: "30d" },
   { label: "90d", value: "90d" },
@@ -37,6 +40,8 @@ export function Header({
   loading,
   onSyncClick,
   isSyncing,
+  onExportCsv,
+  hasData,
 }: HeaderProps) {
   const [selectedBmId, setSelectedBmId] = useState<string>(ALL_BMS);
   const [activePreset, setActivePreset] = useState<string>("30d");
@@ -209,6 +214,19 @@ export function Header({
                   {activePreset === "custom" ? dateLabel : "Período"}
                 </Button>
               </PopoverTrigger>
+              {onExportCsv && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onExportCsv}
+                disabled={!hasData}
+                className="h-8 gap-1.5 text-xs font-medium hover:text-foreground"
+                title="Exportar dados como CSV"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Exportar CSV</span>
+              </Button>
+            )}
               <PopoverContent className="w-auto p-0" align="end">
                 {/* Chips de início/fim — clicáveis para editar cada um */}
                 <div className="flex items-center gap-2 border-b border-border px-4 py-3">

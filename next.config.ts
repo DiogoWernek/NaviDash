@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     domains: [],
   },
+  transpilePackages: ["react-simple-maps"],
 };
 
 export default nextConfig;

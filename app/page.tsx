@@ -7,8 +7,101 @@ import { DashboardLineChart } from "@/components/dashboard/LineChart";
 import { DashboardBarChart } from "@/components/dashboard/BarChart";
 import { BreakdownTable } from "@/components/dashboard/BreakdownTable";
 import { CampaignsTable } from "@/components/dashboard/CampaignsTable";
-import type { BusinessManager, AdAccount, DailyInsight, Campaign, FilterState } from "@/types";
+import { GeoMap } from "@/components/dashboard/GeoMap";
+import type { BusinessManager, AdAccount, DailyInsight, Campaign, FilterState, GeoData } from "@/types";
 import { dateToString } from "@/lib/utils";
+
+const OBJECTIVE_PT: Record<string, string> = {
+  CONVERSIONS: "Conversões", BRAND_AWARENESS: "Reconhecimento", APP_INSTALLS: "Instalações",
+  LEAD_GENERATION: "Leads", TRAFFIC: "Tráfego", ENGAGEMENT: "Engajamento",
+  VIDEO_VIEWS: "Visualizações", MESSAGES: "Mensagens", OUTCOME_ENGAGEMENT: "Engajamento",
+  OUTCOME_LEADS: "Leads", OUTCOME_TRAFFIC: "Tráfego", OUTCOME_SALES: "Vendas",
+  OUTCOME_APP_PROMOTION: "App", OUTCOME_AWARENESS: "Reconhecimento",
+};
+const STATUS_PT: Record<string, string> = { ACTIVE: "Ativo", PAUSED: "Pausado", ARCHIVED: "Arquivado" };
+
+function csvResultado(c: Campaign): { value: number | null; label: string } {
+  const obj = c.objective.toUpperCase();
+  if (obj.includes("LEAD")) return { value: c.leads_form ?? null, label: "Leads" };
+  if (obj === "MESSAGES") return { value: c.messaging_conversations ?? null, label: "Conversas" };
+  if (obj.includes("TRAFFIC")) return { value: c.clicks ?? null, label: "Cliques LP" };
+  if (obj === "APP_INSTALLS" || obj.includes("APP_PROMOTION")) return { value: c.conversions ?? null, label: "Instalações" };
+  return { value: c.conversions ?? null, label: "Compras" };
+}
+
+function csvCustoResultado(c: Campaign): number | null {
+  if (c.cost_per_result) return c.cost_per_result;
+  const obj = c.objective.toUpperCase();
+  if (obj.includes("LEAD")) return c.cost_per_lead_form ?? null;
+  if (obj === "MESSAGES") return c.cost_per_conversation ?? null;
+  if (obj.includes("TRAFFIC")) return c.cost_per_landing_page_view ?? null;
+  if (obj.includes("VIDEO") || obj.includes("AWARENESS")) return c.cost_per_thruplay ?? null;
+  return c.cpa ?? null;
+}
+
+function generateCampaignsCsv(campaigns: Campaign[], dateFrom: string, dateTo: string): string {
+  const sep = ";";
+  const headers = [
+    "Nome", "Status", "Objetivo", "Tipo de Resultado", "Resultado", "Custo/Resultado",
+    "Orçamento (R$)", "Gasto (R$)", "Impressões", "Cliques", "CTR (%)", "CPM (R$)", "CPA (R$)", "ROAS",
+    "Conversas", "Custo/Conversa (R$)", "Leads Form.", "Custo/Lead Form. (R$)",
+    "Custo/ThruPlay (R$)", "Custo/Pág. Site (R$)",
+    "Reações", "Comentários", "Compartilhamentos", "Seguidores", "Visitas ao Perfil",
+    "Última Edição", "Período",
+  ];
+
+  function esc(v: string | number | null | undefined): string {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return s.includes(sep) || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+  function num(v: number | null | undefined): string {
+    if (v === null || v === undefined) return "";
+    return String(Math.round(v * 100) / 100).replace(".", ",");
+  }
+  function int(v: number | null | undefined): string {
+    if (v === null || v === undefined) return "";
+    return String(Math.round(v));
+  }
+
+  const rows = campaigns.map((c) => {
+    const { value: resVal, label: resLabel } = csvResultado(c);
+    const custo = csvCustoResultado(c);
+    const cpa = c.cpa ?? (c.conversions && c.conversions > 0 ? c.spend / c.conversions : null);
+    const periodo = `${dateFrom} a ${dateTo}`;
+    return [
+      esc(c.name),
+      esc(STATUS_PT[c.status] ?? c.status),
+      esc(OBJECTIVE_PT[c.objective] ?? c.objective),
+      esc(resLabel),
+      int(resVal),
+      num(custo),
+      num(c.budget),
+      num(c.spend),
+      int(c.impressions),
+      int(c.clicks),
+      num(c.ctr),
+      num(c.cpm),
+      num(cpa),
+      num(c.roas),
+      int(c.messaging_conversations),
+      num(c.cost_per_conversation),
+      int(c.leads_form),
+      num(c.cost_per_lead_form),
+      num(c.cost_per_thruplay),
+      num(c.cost_per_landing_page_view),
+      int(c.post_reactions),
+      int(c.post_comments),
+      int(c.post_shares),
+      int(c.follows),
+      int(c.profile_visits),
+      esc(c.updated_at ? new Date(c.updated_at).toLocaleDateString("pt-BR") : ""),
+      esc(periodo),
+    ].join(sep);
+  });
+
+  return "﻿" + [headers.join(sep), ...rows].join("\r\n");
+}
 
 export default function DashboardPage() {
   const [businessManagers, setBusinessManagers] = useState<BusinessManager[]>([]);
@@ -19,6 +112,8 @@ export default function DashboardPage() {
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loadingCampaigns, setLoadingCampaigns] = useState(false);
+  const [loadingGeo, setLoadingGeo] = useState(false);
+  const [geoData, setGeoData] = useState<GeoData | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [currentFilters, setCurrentFilters] = useState<FilterState | null>(null);
 
@@ -50,14 +145,15 @@ export default function DashboardPage() {
       endDate: dateToString(filters.dateRange.to),
     });
 
-    // Load insights and campaigns in parallel, with independent loading states
     setLoadingInsights(true);
     setLoadingCampaigns(true);
+    setLoadingGeo(true);
     setCampaigns([]);
 
-    const [insightsRes, campaignsRes] = await Promise.allSettled([
+    const [insightsRes, campaignsRes, geoRes] = await Promise.allSettled([
       fetch(`/api/insights?${params}`).then((r) => r.json()),
       fetch(`/api/campaigns?${params}`).then((r) => r.json()),
+      fetch(`/api/geo?${params}`).then((r) => r.json()),
     ]);
 
     if (insightsRes.status === "fulfilled") {
@@ -75,7 +171,28 @@ export default function DashboardPage() {
       console.error("[page] Campaigns error:", campaignsRes.reason);
     }
     setLoadingCampaigns(false);
+
+    if (geoRes.status === "fulfilled") {
+      setGeoData(geoRes.value);
+    } else {
+      console.error("[page] Geo error:", geoRes.reason);
+    }
+    setLoadingGeo(false);
   }, []);
+
+  const handleExportCsv = useCallback(() => {
+    if (!campaigns.length || !currentFilters) return;
+    const dateFrom = dateToString(currentFilters.dateRange.from);
+    const dateTo = dateToString(currentFilters.dateRange.to);
+    const csv = generateCampaignsCsv(campaigns, dateFrom, dateTo);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `campanhas_${dateFrom}_${dateTo}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [campaigns, currentFilters]);
 
   async function handleSync() {
     setIsSyncing(true);
@@ -105,6 +222,8 @@ export default function DashboardPage() {
         loading={loadingAccounts}
         onSyncClick={handleSync}
         isSyncing={isSyncing}
+        onExportCsv={handleExportCsv}
+        hasData={campaigns.length > 0}
       />
 
       <main className="mx-auto max-w-screen-2xl px-4 py-6 sm:px-6">
@@ -131,6 +250,8 @@ export default function DashboardPage() {
               />
             </div>
           </div>
+
+          <GeoMap geoData={geoData} loading={loadingGeo} />
 
           <BreakdownTable insights={insights} loading={loadingInsights} />
 

@@ -522,7 +522,7 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
               <div className="flex rounded-lg border border-border p-0.5 bg-muted/30">
                 {([
                   { value: "upload" as const, label: "Upload", icon: <Upload className="h-3.5 w-3.5" /> },
-                  { value: "generate" as const, label: "Gerar com IA", icon: <Wand2 className="h-3.5 w-3.5" /> },
+                  { value: "generate" as const, label: "Prompt para IA", icon: <Wand2 className="h-3.5 w-3.5" /> },
                 ] as const).map((m) => (
                   <button
                     key={m.value}
@@ -558,9 +558,9 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
               {imageMode === "generate" && (
                 <ImageGenerator
                   initialPrompt={buildImagePrompt(form)}
-                  onAccept={(url) => {
+                  onAccept={(url, preview) => {
                     setImageUrl(url);
-                    setImagePreview(url);
+                    setImagePreview(preview);
                     setErrors((prev) => ({ ...prev, image: undefined }));
                   }}
                   disabled={disabled}

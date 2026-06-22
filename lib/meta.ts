@@ -235,13 +235,14 @@ export interface MetaCampaignRaw {
   status: string;
   objective: string;
   daily_budget?: string;
+  updated_time?: string;
 }
 
 export async function fetchCampaignList(
   accountId: string,
   accessToken: string
 ): Promise<MetaCampaignRaw[]> {
-  const url = `${META_API_BASE}/${accountId}/campaigns?fields=id,name,status,objective,daily_budget&limit=200&access_token=${accessToken}`;
+  const url = `${META_API_BASE}/${accountId}/campaigns?fields=id,name,status,objective,daily_budget,updated_time&limit=200&access_token=${accessToken}`;
   const res = await fetch(url);
   if (!res.ok) return [];
   const json = await res.json();

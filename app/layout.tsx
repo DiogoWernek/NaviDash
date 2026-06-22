@@ -31,6 +31,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <body
         className={`${outfit.variable} ${jetbrainsMono.variable} font-sans`}
+        suppressHydrationWarning
       >
         <ThemeProvider
           attribute="class"

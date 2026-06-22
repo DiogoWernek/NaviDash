@@ -84,6 +84,7 @@ async function handleReal(accountIds: string[], startDate: string, endDate: stri
               name: mc.name,
               status: mc.status as "ACTIVE" | "PAUSED" | "ARCHIVED",
               objective: mc.objective,
+              updated_at: mc.updated_time,
               budget: mc.daily_budget ? parseFloat(mc.daily_budget) / 100 : undefined,
               spend,
               impressions: parseInt(ci?.impressions ?? "0"),

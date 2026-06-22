@@ -55,6 +55,7 @@ export interface Campaign {
   status: "ACTIVE" | "PAUSED" | "ARCHIVED";
   objective: string;
   budget?: number;
+  updated_at?: string;
   spend: number;
   impressions: number;
   clicks: number;
@@ -175,6 +176,21 @@ export interface FilterState {
   selectedBmId: string;
   selectedAccountIds: string[];
   dateRange: DateRange;
+}
+
+export interface GeoDataItem {
+  code: string;
+  name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpm: number;
+}
+
+export interface GeoData {
+  brazil: GeoDataItem[];
+  africa: GeoDataItem[];
 }
 
 // ── Agente ───────────────────────────────────────────────────────────────────

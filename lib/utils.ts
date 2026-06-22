@@ -97,6 +97,11 @@ export function getDateRange(preset: string): { from: Date; to: Date } {
     case "today": {
       return { from: today, to: today };
     }
+    case "1d": {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      return { from: yesterday, to: yesterday };
+    }
     case "7d": {
       const from = new Date(today);
       from.setDate(today.getDate() - 6);

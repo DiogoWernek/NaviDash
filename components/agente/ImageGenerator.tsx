@@ -1,37 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { Wand2, RefreshCw, Check, Loader2, X } from "lucide-react";
+import { Wand2, Copy, Check, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ImageUpload } from "./ImageUpload";
 
 interface ImageGeneratorProps {
   initialPrompt?: string;
-  onAccept: (url: string) => void;
+  onAccept: (url: string, preview: string) => void;
   disabled?: boolean;
 }
 
 export function ImageGenerator({ initialPrompt = "", onAccept, disabled }: ImageGeneratorProps) {
-  const [prompt, setPrompt] = useState(initialPrompt);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const generate = async () => {
-    if (!prompt.trim()) return;
+    if (!initialPrompt.trim()) return;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/generate-image", {
+      const res = await fetch("/api/generate-image-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ brief: initialPrompt }),
       });
-      const data = await res.json() as { url?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Falha ao gerar imagem");
-      setGeneratedUrl(data.url ?? null);
+      const data = await res.json() as { prompt?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Falha ao gerar prompt");
+      setGeneratedPrompt(data.prompt ?? null);
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
     } finally {
@@ -39,77 +40,95 @@ export function ImageGenerator({ initialPrompt = "", onAccept, disabled }: Image
     }
   };
 
+  const copy = async () => {
+    if (!generatedPrompt) return;
+    await navigator.clipboard.writeText(generatedPrompt);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="space-y-3">
-      {/* Prompt textarea */}
-      <div className="space-y-1.5">
-        <Textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Descreva a imagem do anúncio: produto, ambiente, estilo, cores..."
-          rows={3}
-          className="text-sm resize-none"
-          disabled={loading || disabled}
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Seja específico. Ex: "Casal jovem praticando esportes ao ar livre, cores vibrantes, fundo branco"
-        </p>
-      </div>
-
-      {/* Generate / Result */}
-      {!generatedUrl ? (
-        <Button
-          type="button"
-          className={cn("w-full h-9 gap-2 text-sm", loading && "bg-meta-blue/80")}
-          onClick={generate}
-          disabled={loading || !prompt.trim() || disabled}
-        >
-          {loading ? (
-            <><Loader2 className="h-4 w-4 animate-spin" />Gerando imagem...</>
-          ) : (
-            <><Wand2 className="h-4 w-4" />Gerar imagem com IA</>
-          )}
-        </Button>
-      ) : (
+      {!generatedPrompt ? (
         <div className="space-y-2">
-          {/* Preview */}
-          <div className="relative rounded-xl overflow-hidden border border-border">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={generatedUrl} alt="Imagem gerada" className="w-full h-44 object-cover" />
-            {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/70">
-                <Loader2 className="h-7 w-7 text-meta-blue animate-spin" />
-              </div>
+          <p className="text-xs text-muted-foreground">
+            Claude cria um prompt detalhado em inglês com base nas informações do anúncio.
+            Cole-o no <span className="font-medium text-foreground">Gemini</span> para gerar a imagem e depois faça upload aqui.
+          </p>
+          <Button
+            type="button"
+            className={cn("w-full h-9 gap-2 text-sm", loading && "bg-meta-blue/80")}
+            onClick={generate}
+            disabled={loading || !initialPrompt.trim() || disabled}
+          >
+            {loading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" />Gerando prompt...</>
+            ) : (
+              <><Wand2 className="h-4 w-4" />Gerar Prompt com Claude</>
             )}
+          </Button>
+          {!initialPrompt.trim() && (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Preencha o título e texto principal primeiro
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prompt gerado</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs gap-1.5"
+                onClick={copy}
+              >
+                {copied ? (
+                  <><Check className="h-3 w-3 text-success" />Copiado!</>
+                ) : (
+                  <><Copy className="h-3 w-3" />Copiar</>
+                )}
+              </Button>
+            </div>
+            <Textarea
+              value={generatedPrompt}
+              onChange={(e) => setGeneratedPrompt(e.target.value)}
+              rows={5}
+              className="text-xs font-mono resize-none"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Você pode editar o prompt. Cole no{" "}
+              <span className="font-medium text-foreground">Gemini</span>{" "}
+              (gemini.google.com) ou outro gerador de imagens.
+            </p>
           </div>
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="flex-1 gap-1.5 text-xs"
-              onClick={generate}
-              disabled={loading || disabled}
-            >
-              {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              Gerar novamente
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="flex-1 gap-1.5 text-xs bg-success hover:bg-success/90 text-white"
-              onClick={() => onAccept(generatedUrl)}
-              disabled={loading || disabled}
-            >
-              <Check className="h-3.5 w-3.5" />
-              Usar esta imagem
-            </Button>
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] text-muted-foreground">Após gerar, faça upload aqui</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
+
+          <ImageUpload
+            onUpload={(url, preview) => onAccept(url, preview)}
+            onClear={() => {}}
+            imageUrl={null}
+            disabled={disabled}
+          />
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full h-7 text-xs text-muted-foreground gap-1.5"
+            onClick={() => { setGeneratedPrompt(null); setError(null); }}
+            disabled={disabled}
+          >
+            <Wand2 className="h-3 w-3" />
+            Gerar novo prompt
+          </Button>
         </div>
       )}
 
