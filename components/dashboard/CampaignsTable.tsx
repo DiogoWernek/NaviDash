@@ -208,7 +208,7 @@ function AdSetRows({ adsets, loadingAdsets, accountId, objective, onAdAction, on
         return (
           <React.Fragment key={adset.id}>
             <tr
-              className="border-b border-border/40 bg-muted/5 cursor-pointer transition-colors hover:bg-muted/15"
+              className="border-b border-border/40 bg-meta-blue/[0.09] cursor-pointer transition-colors hover:bg-meta-blue/[0.12]"
               onClick={() => toggleAdSet(adset.id)}
             >
               {/* Ações */}
@@ -262,7 +262,12 @@ function AdSetRows({ adsets, loadingAdsets, accountId, objective, onAdAction, on
                   {adset.ads && adset.ads.length > 0 ? (
                     isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   ) : <div className="w-3.5" />}
-                  <span className="text-xs font-medium truncate max-w-[200px]">{adset.name}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs font-medium truncate max-w-[200px] cursor-default">{adset.name}</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="text-xs max-w-xs">{adset.name}</TooltipContent>
+                  </Tooltip>
                 </div>
               </td>
               {/* Status */}
@@ -330,7 +335,7 @@ function AdSetRows({ adsets, loadingAdsets, accountId, objective, onAdAction, on
               const adResultado = getAdResultadoValue(ad, objective);
               const adCusto = getAdCustoResultadoValue(ad, objective);
               return (
-                <tr key={ad.id} className="border-b border-border/30 bg-muted/10 transition-colors hover:bg-muted/20">
+                <tr key={ad.id} className="border-b border-border/30 bg-meta-blue/[0.17] dark:bg-meta-blue-light/[0.12] transition-colors hover:bg-meta-blue/[0.22] dark:hover:bg-meta-blue/[0.08]">
                   {/* Ações */}
                   <td className="pl-4 pr-2 py-2 text-center">
                     <div className="flex items-center justify-center gap-0.5">
@@ -390,7 +395,12 @@ function AdSetRows({ adsets, loadingAdsets, accountId, objective, onAdAction, on
                   <td className="py-2 pr-3" style={{ paddingLeft: "60px" }}>
                     <div className="flex items-center gap-2">
                       <div className="h-1 w-1 rounded-full bg-muted-foreground/40 shrink-0" />
-                      <span className="text-xs text-muted-foreground truncate max-w-[190px]">{ad.name}</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-xs text-muted-foreground truncate max-w-[190px] cursor-default">{ad.name}</span>
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="text-xs max-w-xs">{ad.name}</TooltipContent>
+                      </Tooltip>
                     </div>
                   </td>
                   {/* Status */}
@@ -795,7 +805,10 @@ export function CampaignsTable({ campaigns, loading, currentFilters }: Campaigns
                         return (
                           <React.Fragment key={campaign.id}>
                             <tr
-                              className={cn("border-b border-border/60 cursor-pointer transition-colors hover:bg-muted/20", isExpanded && "bg-muted/10")}
+                              className={cn(
+                                "border-b border-border/60 cursor-pointer transition-colors hover:bg-meta-blue/[0.05]",
+                                isExpanded ? "bg-meta-blue/[0.04]" : "bg-meta-blue/[0.02]"
+                              )}
                               onClick={() => toggleCampaign(campaign)}
                             >
                               {/* Ações */}
@@ -859,7 +872,12 @@ export function CampaignsTable({ campaigns, loading, currentFilters }: Campaigns
                                   {isExpanded
                                     ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                                     : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-                                  <span className="text-sm font-medium truncate max-w-[200px]">{campaign.name}</span>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-sm font-medium truncate max-w-[200px] cursor-default">{campaign.name}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" className="text-xs max-w-xs">{campaign.name}</TooltipContent>
+                                  </Tooltip>
                                 </div>
                               </td>
                               {/* Status */}

@@ -269,6 +269,7 @@ export interface AgentFormData {
   bm_id: string;
   account_ids: string[];   // uma conta selecionada
   facebook_page_id?: string;
+  whatsapp_number?: string; // objetivo Leads via Click-to-WhatsApp (DDI+DDD+número)
   campaign_name: string;
   objective: AdObjective;
   budget_type: "daily" | "total";
@@ -352,6 +353,7 @@ export interface AdPlanCreative {
   link: string;
   page_id: string;
   image_urls: string[];   // 1 = imagem única, 2+ = carrossel
+  whatsapp_link?: string; // destino do CTA quando call_to_action_type = WHATSAPP_MESSAGE
 }
 
 export interface AdPlanAdset {
@@ -360,6 +362,8 @@ export interface AdPlanAdset {
   end_time?: string;
   optimization_goal: string;
   billing_event: string;
+  destination_type?: string;             // ex.: "WHATSAPP" (Click-to-WhatsApp)
+  promoted_object?: { page_id?: string };
   targeting: AdPlanTargeting;
   creative: AdPlanCreative;   // cada público tem seu próprio criativo
 }

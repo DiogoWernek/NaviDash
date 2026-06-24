@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   CheckCircle2, Edit2, ExternalLink, Megaphone,
   Image as ImageIcon, LayoutGrid, AlertCircle, ArrowLeft, Send, Tag, Images,
+  Copy, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ const CTA_LABELS: Record<string, string> = {
   CONTACT_US: "Fale Conosco",
   BOOK_NOW: "Reserve Agora",
   GET_QUOTE: "Solicitar Orçamento",
+  WHATSAPP_MESSAGE: "Enviar mensagem (WhatsApp)",
 };
 
 const OBJECTIVE_LABELS: Record<string, string> = {
@@ -39,6 +41,84 @@ function formatBudget(cents: number | null | undefined): string {
 function toLocalInput(metaTime?: string): string {
   if (!metaTime) return "";
   return metaTime.slice(0, 16);
+}
+
+// "YYYY-MM-DDTHH:mm:ss+0000" → "DD/MM/YYYY HH:mm"
+function formatDateTime(metaTime?: string): string {
+  if (!metaTime) return "—";
+  const [datePart, timePart] = metaTime.slice(0, 16).split("T");
+  if (!datePart) return "—";
+  const [y, m, d] = datePart.split("-");
+  return `${d}/${m}/${y}${timePart ? ` ${timePart}` : ""}`;
+}
+
+function genderLabelFor(genders: number[]): string {
+  if (!genders.length || genders.includes(0)) return "Todos";
+  return genders.map((g) => (g === 1 ? "Masculino" : "Feminino")).join(" + ");
+}
+
+// Serializa o plano completo em texto plano para a área de transferência.
+function buildPlanText(plan: AdPlan): string {
+  const c = plan.campaign;
+  const budget = c.daily_budget
+    ? `${formatBudget(c.daily_budget)} / dia`
+    : `${formatBudget(c.lifetime_budget)} total`;
+
+  const lines: string[] = [];
+
+  lines.push("═══════════════════════════════════════════");
+  lines.push(`CAMPANHA: ${c.name}`);
+  lines.push("═══════════════════════════════════════════");
+  lines.push(`Objetivo: ${OBJECTIVE_LABELS[c.objective] ?? c.objective}`);
+  lines.push(`Orçamento (CBO): ${budget}`);
+  lines.push(`Categorias especiais: ${c.special_ad_categories.length ? c.special_ad_categories.join(", ") : "Nenhuma"}`);
+  lines.push(`Início: ${formatDateTime(plan.adsets[0]?.start_time)}`);
+  lines.push(`Fim: ${formatDateTime(plan.adsets[0]?.end_time)}`);
+  if (plan.summary) {
+    lines.push("");
+    lines.push(`Resumo: ${plan.summary}`);
+  }
+
+  plan.adsets.forEach((adset, i) => {
+    const t = adset.targeting;
+    const cr = adset.creative;
+    const isCarousel = cr.image_urls.length > 1;
+
+    lines.push("");
+    lines.push("───────────────────────────────────────────");
+    lines.push(`CONJUNTO ${i + 1}: ${adset.name}`);
+    lines.push("───────────────────────────────────────────");
+    lines.push(`Meta de otimização: ${adset.optimization_goal}`);
+    lines.push(`Evento de cobrança: ${adset.billing_event}`);
+
+    lines.push("");
+    lines.push("PÚBLICO:");
+    lines.push(`  Localização: ${t.geo_locations.countries?.join(", ") ?? "BR"}${t.geo_locations.cities?.length ? ` — ${t.geo_locations.cities.map((ci) => ci.name).join(", ")}` : ""}`);
+    lines.push(`  Faixa etária: ${t.age_min}–${t.age_max} anos`);
+    lines.push(`  Gênero: ${genderLabelFor(t.genders)}`);
+    const interests = (t.interests ?? []).map((it) => it.name);
+    lines.push(`  Interesses: ${interests.length ? interests.join(", ") : "Sem interesses"}`);
+    const placements = t.publisher_platforms?.length ? t.publisher_platforms.join(", ") : "Automático (Advantage+)";
+    lines.push(`  Posicionamentos: ${placements}`);
+
+    lines.push("");
+    lines.push(`ANÚNCIO${isCarousel ? ` (Carrossel · ${cr.image_urls.length} imagens)` : ""}:`);
+    lines.push(`  Título: ${cr.title}`);
+    lines.push(`  Texto principal: ${cr.body}`);
+    lines.push(`  Descrição: ${cr.description}`);
+    lines.push(`  Botão (CTA): ${CTA_LABELS[cr.call_to_action_type] ?? cr.call_to_action_type}`);
+    lines.push(`  URL de destino: ${cr.link || "—"}`);
+    if (adset.destination_type === "WHATSAPP") {
+      lines.push(`  Destino do clique: WhatsApp${cr.whatsapp_link ? ` — ${cr.whatsapp_link}` : ""}`);
+    }
+    lines.push(`  Page ID: ${cr.page_id || "—"}`);
+    lines.push(`  ${isCarousel ? "Imagens" : "Imagem"}:`);
+    cr.image_urls.forEach((url, idx) => {
+      lines.push(`    ${idx + 1}. ${url}`);
+    });
+  });
+
+  return lines.join("\n");
 }
 
 interface EditableFieldProps {
@@ -129,6 +209,17 @@ interface AdPlanReviewProps {
 
 export function AdPlanReview({ plan, isMock, onApprove, onBack, disabled }: AdPlanReviewProps) {
   const [edited, setEdited] = useState<AdPlan>(() => JSON.parse(JSON.stringify(plan)));
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyPlan = async () => {
+    try {
+      await navigator.clipboard.writeText(buildPlanText(edited));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard indisponível — ignora silenciosamente
+    }
+  };
 
   const setCampaign = (field: keyof AdPlan["campaign"], value: unknown) =>
     setEdited((prev) => ({ ...prev, campaign: { ...prev.campaign, [field]: value } }));
@@ -293,6 +384,15 @@ export function AdPlanReview({ plan, isMock, onApprove, onBack, disabled }: AdPl
                   </div>
 
                   <EditableField label="URL de destino" value={adset.creative.link} onChange={(v) => setCreative(i, "link", v)} type="url" />
+
+                  {adset.destination_type === "WHATSAPP" && (
+                    <div className="rounded-md border border-success/30 bg-success/5 px-2.5 py-1.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-success mb-0.5">Destino do clique</p>
+                      <p className="text-xs text-foreground">
+                        WhatsApp{adset.creative.whatsapp_link ? ` · +${adset.creative.whatsapp_link.replace(/\D/g, "")}` : ""}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -333,6 +433,14 @@ export function AdPlanReview({ plan, isMock, onApprove, onBack, disabled }: AdPl
           Voltar ao formulário
         </Button>
         <div className="flex-1" />
+        <Button
+          variant="outline"
+          onClick={handleCopyPlan}
+          className={cn("gap-1.5", copied && "border-success/40 text-success")}
+        >
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? "Copiado!" : "Copiar dados"}
+        </Button>
         <Button variant="meta" onClick={() => onApprove(edited)} disabled={disabled} className="gap-2 px-6 shadow-md shadow-meta-blue/20">
           <Send className="h-4 w-4" />
           {isMock ? "Simular criação" : "Aprovar e Criar Anúncio"}

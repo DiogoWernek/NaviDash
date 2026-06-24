@@ -76,6 +76,33 @@ function injectImages(plan: AdPlan, formData: AgentFormData): AdPlan {
   };
 }
 
+// Objetivo Leads via Click-to-WhatsApp: a Meta exige destination_type + promoted_object
+// (página) + otimização por CONVERSAS, e o criativo precisa do CTA WHATSAPP_MESSAGE.
+// Sobrescreve o que o modelo gerou para garantir uma configuração válida.
+function applyWhatsApp(plan: AdPlan, formData: AgentFormData): AdPlan {
+  if (formData.objective !== "OUTCOME_LEADS" || !formData.whatsapp_number) return plan;
+  const digits = formData.whatsapp_number.replace(/\D/g, "");
+  if (!digits) return plan;
+  const waLink = `https://api.whatsapp.com/send?phone=${digits}`;
+  const pageId = formData.facebook_page_id ?? "";
+  return {
+    ...plan,
+    adsets: plan.adsets.map((adset) => ({
+      ...adset,
+      optimization_goal: "CONVERSATIONS",
+      billing_event: "IMPRESSIONS",
+      destination_type: "WHATSAPP",
+      promoted_object: { page_id: pageId },
+      creative: {
+        ...adset.creative,
+        call_to_action_type: "WHATSAPP_MESSAGE",
+        whatsapp_link: waLink,
+        link: adset.creative.link || waLink,
+      },
+    })),
+  };
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json() as { formData: AgentFormData };
   const { formData } = body;
@@ -134,7 +161,7 @@ export async function POST(req: NextRequest) {
         },
       })),
     };
-    return NextResponse.json({ plan: mockPlan, mock: true });
+    return NextResponse.json({ plan: applyWhatsApp(mockPlan, formData), mock: true });
   }
 
   try {
@@ -169,6 +196,7 @@ export async function POST(req: NextRequest) {
     }));
 
     plan = injectImages(plan, formData);
+    plan = applyWhatsApp(plan, formData);
 
     return NextResponse.json({ plan, mock: false });
   } catch (err) {

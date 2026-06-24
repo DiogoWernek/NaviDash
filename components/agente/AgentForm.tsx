@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Building2, Megaphone, Users, LayoutGrid,
   ChevronDown, ChevronUp, Send, AlertCircle, Upload, Wand2, X as XIcon,
-  Plus, Trash2, Images,
+  Plus, Trash2, Images, Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +82,7 @@ const defaultForm: AgentFormData = {
   bm_id: "",
   account_ids: [],
   facebook_page_id: "",
+  whatsapp_number: "",
   campaign_name: "",
   objective: "OUTCOME_TRAFFIC",
   budget_type: "daily",
@@ -176,13 +177,14 @@ interface AudienceCardProps {
   disabled?: boolean;
   onChange: (partial: Partial<AudienceCreative>) => void;
   onRemove: () => void;
+  onDuplicate: () => void;
   onAddImage: (img: AudienceImage) => void;
   onRemoveImage: (imgIndex: number) => void;
 }
 
 function AudienceCard({
   audience, index, total, campaignName, attempted, disabled,
-  onChange, onRemove, onAddImage, onRemoveImage,
+  onChange, onRemove, onDuplicate, onAddImage, onRemoveImage,
 }: AudienceCardProps) {
   const [imageMode, setImageMode] = useState<"upload" | "generate">("upload");
   const a = audience;
@@ -204,19 +206,32 @@ function AudienceCard({
             </Badge>
           )}
         </div>
-        {total > 1 && (
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={onRemove}
+            className="h-7 w-7 text-muted-foreground hover:bg-meta-blue/10 hover:text-meta-blue"
+            onClick={onDuplicate}
             disabled={disabled}
-            title="Remover público"
+            title="Duplicar público (copia criativos e campos)"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Copy className="h-3.5 w-3.5" />
           </Button>
-        )}
+          {total > 1 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onRemove}
+              disabled={disabled}
+              title="Remover público"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Público ── */}
@@ -464,6 +479,23 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
   const addAudience = () =>
     setForm((prev) => ({ ...prev, audiences: [...prev.audiences, makeAudience()] }));
 
+  // Duplica um público logo abaixo do original, copiando criativos e campos preenchidos
+  const duplicateAudience = (id: string) =>
+    setForm((prev) => {
+      const index = prev.audiences.findIndex((a) => a.id === id);
+      if (index === -1) return prev;
+      const source = prev.audiences[index];
+      const copy: AudienceCreative = {
+        ...source,
+        id: uid(),
+        genders: [...source.genders],
+        images: source.images.map((img) => ({ ...img })),
+      };
+      const next = [...prev.audiences];
+      next.splice(index + 1, 0, copy);
+      return { ...prev, audiences: next };
+    });
+
   const removeAudience = (id: string) =>
     setForm((prev) => ({ ...prev, audiences: prev.audiences.filter((a) => a.id !== id) }));
 
@@ -497,10 +529,15 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
     !!a.audience_description.trim() && !!a.locations.trim() && a.images.length > 0 &&
     !!a.headline.trim() && !!a.primary_text.trim() && !!a.destination_url.trim();
 
+  // Leads via Click-to-WhatsApp exige número do WhatsApp + ID da página
+  const leadsWhatsAppOk =
+    form.objective !== "OUTCOME_LEADS" ||
+    (!!form.whatsapp_number?.trim() && !!form.facebook_page_id?.trim());
+
   const isSection1Done = form.account_ids.length > 0;
   const isSection2Done =
     !!form.campaign_name.trim() && form.budget_amount > 0 && !!form.start_date &&
-    (form.budget_type !== "total" || !!form.end_date);
+    (form.budget_type !== "total" || !!form.end_date) && leadsWhatsAppOk;
   const isSection3Done = form.audiences.length > 0 && form.audiences.every(audienceValid);
 
   const isValid = isSection1Done && isSection2Done && isSection3Done &&
@@ -604,6 +641,26 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
           </Select>
         </FieldRow>
 
+        {form.objective === "OUTCOME_LEADS" && (
+          <FieldRow
+            label="Número do WhatsApp"
+            required
+            hint="Leads via Click-to-WhatsApp. Com DDI e DDD (ex: 55 98 8464-8307). Exige também o ID da Página do Facebook (Seção 1), com o WhatsApp conectado à página."
+          >
+            <Input
+              value={form.whatsapp_number ?? ""}
+              onChange={(e) => set("whatsapp_number", e.target.value)}
+              placeholder="Ex: 55 98 8464-8307"
+              className={cn("h-9 text-sm", attempted && !form.whatsapp_number?.trim() && "border-destructive")}
+            />
+            {attempted && !form.facebook_page_id?.trim() && (
+              <p className="text-xs text-destructive">
+                Preencha o ID da Página do Facebook na Seção 1 — obrigatório para leads no WhatsApp.
+              </p>
+            )}
+          </FieldRow>
+        )}
+
         <div className="grid grid-cols-2 gap-2">
           <FieldRow label="Tipo de Orçamento">
             <Select value={form.budget_type} onValueChange={(v) => set("budget_type", v as "daily" | "total")}>
@@ -684,6 +741,7 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
               disabled={disabled}
               onChange={(partial) => updateAudience(a.id, partial)}
               onRemove={() => removeAudience(a.id)}
+              onDuplicate={() => duplicateAudience(a.id)}
               onAddImage={(img) => addImage(a.id, img)}
               onRemoveImage={(idx) => removeImage(a.id, idx)}
             />

@@ -298,9 +298,8 @@ export function parseLeadsForm(data: MetaInsightsRaw): number {
 }
 
 export function parseThruPlay(data: MetaInsightsRaw): number {
-  const actions = data.actions ?? [];
-  const item = actions.find((a) => a.action_type === "video_thruplay");
-  return item ? parseInt(item.value) : 0;
+  const arr = data.video_thruplay_watched_actions as Array<{ value: string }> | undefined;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
 }
 
 export function parseLandingPageViews(data: MetaInsightsRaw): number {
@@ -362,6 +361,7 @@ export async function fetchAdVideoMetrics(
     "video_p75_watched_actions",
     "video_p100_watched_actions",
     "video_avg_time_watched_actions",
+    "video_thruplay_watched_actions",
     "actions",
   ].join(",");
 

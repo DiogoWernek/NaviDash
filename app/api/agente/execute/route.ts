@@ -8,7 +8,7 @@ import {
   createAdCreative,
   createAd,
 } from "@/lib/meta-ads-create";
-import type { AdPlan, ExecuteResult, ExecuteAdsetResult } from "@/types";
+import type { AdPlan, ExecuteResult, ExecuteAdsetResult, AgentFormData } from "@/types";
 
 const USE_MOCK = process.env.MOCK_AGENT === "true";
 
@@ -17,12 +17,14 @@ const CAMPAIGN_GROUP = "__campaign__";
 interface ExecuteBody {
   plan: AdPlan;
   accountIds: string[];
+  formData?: AgentFormData;
   runId?: string;
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json() as ExecuteBody;
-  const { plan, accountIds, runId } = body;
+  const { plan, accountIds, formData } = body;
+  let runId = body.runId ?? null;
 
   if (!plan || !accountIds?.length || !plan.adsets?.length) {
     return new Response(
@@ -95,6 +97,26 @@ export async function POST(req: NextRequest) {
         const account = accounts[0];
         const { id: dbId, name: accountName, meta_account_id: metaAccountId, access_token: token } = account;
 
+        // Registra a execução no histórico (server-side — o client não tem service role)
+        if (formData && !runId) {
+          try {
+            const { data: run } = await supabaseAdmin
+              .from("agent_runs")
+              .insert({
+                account_id: formData.account_ids[0] ?? dbId ?? null,
+                form_data: formData,
+                image_url: formData.audiences[0]?.images[0]?.url ?? null,
+                status: "running",
+                started_at: new Date().toISOString(),
+              })
+              .select("id")
+              .single();
+            runId = run?.id ?? null;
+          } catch {
+            // logging não-fatal
+          }
+        }
+
         // 1) Campanha (CBO) — criada uma vez
         send({ type: "step", step: "create_campaign", status: "start", label: "Criando campanha...", group_id: CAMPAIGN_GROUP });
         const campaignId = await createCampaign(metaAccountId, token, {
@@ -114,6 +136,7 @@ export async function POST(req: NextRequest) {
           const gid = String(i);
           send({ type: "group_start", group_id: gid, group_name: adset.name });
 
+          let currentStep = "upload_image";
           try {
             // Upload das imagens desse público → hashes
             send({ type: "step", step: "upload_image", status: "start", label: `Enviando ${adset.creative.image_urls.length} imagem(ns) para a Meta...`, group_id: gid });
@@ -134,6 +157,7 @@ export async function POST(req: NextRequest) {
             send({ type: "step", step: "search_interests", status: "done", label: `${resolvedInterests.length} interesses encontrados`, group_id: gid });
 
             // Adset (sem budget — CBO na campanha)
+            currentStep = "create_adset";
             send({ type: "step", step: "create_adset", status: "start", label: "Criando conjunto de anúncios...", group_id: gid });
             const adsetId = await createAdset(metaAccountId, token, campaignId, {
               name: adset.name,
@@ -151,11 +175,14 @@ export async function POST(req: NextRequest) {
               publisher_platforms: adset.targeting.publisher_platforms,
               facebook_positions: adset.targeting.facebook_positions,
               instagram_positions: adset.targeting.instagram_positions,
+              destination_type: adset.destination_type,
+              promoted_object: adset.promoted_object,
             });
             send({ type: "step", step: "create_adset", status: "done", label: "Conjunto de anúncios criado", value: adsetId, group_id: gid });
 
             // Criativo (carrossel se 2+ imagens)
             const isCarousel = imageHashes.length > 1;
+            currentStep = "create_creative";
             send({ type: "step", step: "create_creative", status: "start", label: isCarousel ? "Criando criativo em carrossel..." : "Criando criativo do anúncio...", group_id: gid });
             const creativeId = await createAdCreative(metaAccountId, token, {
               name: adset.creative.name,
@@ -166,10 +193,12 @@ export async function POST(req: NextRequest) {
               description: adset.creative.description,
               call_to_action_type: adset.creative.call_to_action_type,
               link: adset.creative.link,
+              whatsapp_link: adset.creative.whatsapp_link,
             });
             send({ type: "step", step: "create_creative", status: "done", label: isCarousel ? "Carrossel criado" : "Criativo criado", value: creativeId, group_id: gid });
 
             // Anúncio
+            currentStep = "create_ad";
             send({ type: "step", step: "create_ad", status: "start", label: "Criando anúncio...", group_id: gid });
             const adId = await createAd(metaAccountId, token, {
               name: adset.name,
@@ -183,12 +212,23 @@ export async function POST(req: NextRequest) {
             const errMsg = String(adsetErr instanceof Error ? adsetErr.message : adsetErr);
             overallStatus = adsetResults.length > 0 ? "partial" : "failed";
             errorLog = (errorLog ? errorLog + "\n" : "") + `[${adset.name}] ${errMsg}`;
-            send({ type: "step", step: "create_ad", status: "error", label: `Erro: ${errMsg}`, group_id: gid });
+            send({ type: "step", step: currentStep, status: "error", label: `Erro: ${errMsg}`, group_id: gid });
           }
         }
 
         result = { account_id: dbId, account_name: accountName, campaign_id: campaignId, adsets: adsetResults };
-        send({ type: "done", result });
+        if (adsetResults.length === 0) {
+          // A campanha foi criada, mas nenhum conjunto/anúncio subiu — não reportar como sucesso
+          send({
+            type: "error",
+            message:
+              (errorLog ? `${errorLog}\n\n` : "") +
+              `A campanha (${campaignId}) foi criada, mas nenhum conjunto de anúncios pôde ser criado. Verifique o objetivo e as configurações acima.`,
+            result,
+          });
+        } else {
+          send({ type: "done", result });
+        }
       } catch (err) {
         overallStatus = "failed";
         errorLog = String(err instanceof Error ? err.message : err);

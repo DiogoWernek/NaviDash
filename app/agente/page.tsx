@@ -176,26 +176,6 @@ export default function AgentePage() {
     ];
     setExecGroups(initialGroups);
 
-    // Create run record (non-blocking)
-    let currentRunId: string | null = null;
-    try {
-      const { supabaseAdmin } = await import("@/lib/supabase");
-      const { data: run } = await supabaseAdmin
-        .from("agent_runs")
-        .insert({
-          account_id: formData.account_ids[0] ?? null,
-          form_data: formData,
-          image_url: formData.audiences[0]?.images[0]?.url ?? null,
-          status: "running",
-          started_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
-      currentRunId = run?.id ?? null;
-    } catch {
-      // Non-fatal
-    }
-
     try {
       const res = await fetch("/api/agente/execute", {
         method: "POST",
@@ -203,7 +183,7 @@ export default function AgentePage() {
         body: JSON.stringify({
           plan: approvedPlan,
           accountIds: formData.account_ids,
-          runId: currentRunId,
+          formData,
         }),
       });
 
