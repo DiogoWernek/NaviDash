@@ -74,13 +74,17 @@ async function fetchAll<T>(url: string, embeddedKey: string): Promise<T[]> {
   const items: T[] = [];
   let next: string | undefined = url;
   while (next) {
-    const res = await fetch(next, { headers: { Authorization: `Bearer ${getToken()}` } });
+    const res: Response = await fetch(next, { headers: { Authorization: `Bearer ${getToken()}` } });
     if (res.status === 204) break;
     if (!res.ok) throw new Error(`Kommo ${res.status}: ${await res.text()}`);
-    const json = await res.json();
-    const page: T[] = (json._embedded?.[embeddedKey] as T[]) ?? [];
+    interface KommoPage {
+      _embedded?: Record<string, unknown[]>;
+      _links?: { next?: { href?: string } };
+    }
+    const json = await res.json() as KommoPage;
+    const page: T[] = (json._embedded?.[embeddedKey] as T[] | undefined) ?? [];
     items.push(...page);
-    next = (json._links?.next?.href as string | undefined) ?? undefined;
+    next = json._links?.next?.href ?? undefined;
     if (next) await new Promise((r) => setTimeout(r, 50));
   }
   return items;
