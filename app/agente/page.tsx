@@ -154,6 +154,8 @@ export default function AgentePage() {
 
   const handleApprove = useCallback(async (approvedPlan: AdPlan) => {
     if (!formData) return;
+    // Persiste a versão editada pelo usuário na revisão — usada pelo "Tentar novamente"
+    setPlan(approvedPlan);
     setPhase("executing");
     setExecResult(null);
 
@@ -261,6 +263,20 @@ export default function AgentePage() {
     setFormData(null);
   };
 
+  // Volta ao formulário com os dados preenchidos — não zera o form
+  const handleBackToForm = () => {
+    setPhase("form");
+    setPlanError(null);
+    setExecGroups([]);
+    setExecResult(null);
+    // formData e plan são mantidos: AgentForm recebe initialFormData
+  };
+
+  // Re-executa com o mesmo plano aprovado — sem chamar o Claude novamente
+  const handleRetry = useCallback(() => {
+    if (plan) handleApprove(plan);
+  }, [plan, handleApprove]);
+
   return (
     <div className="flex flex-col min-h-screen bg-background">
       {/* Header */}
@@ -344,6 +360,7 @@ export default function AgentePage() {
                   businessManagers={businessManagers}
                   adAccounts={adAccounts}
                   onSubmit={handleFormSubmit}
+                  initialFormData={formData ?? undefined}
                 />
               )}
             </div>
@@ -396,7 +413,7 @@ export default function AgentePage() {
               plan={plan}
               isMock={isMock}
               onApprove={handleApprove}
-              onBack={handleReset}
+              onBack={handleBackToForm}
             />
           </div>
         )}
@@ -517,13 +534,22 @@ export default function AgentePage() {
               </div>
               <div>
                 <h2 className="text-base font-semibold text-destructive mb-1">Ocorreu um erro</h2>
-                <p className="text-sm text-muted-foreground">{planError}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{planError}</p>
               </div>
-              <div className="flex gap-2 justify-center">
-                <Button variant="outline" onClick={handleReset}>Recomeçar</Button>
+              <div className="flex flex-col gap-2">
                 {plan && (
-                  <Button variant="meta" onClick={() => setPhase("review")}>Voltar à revisão</Button>
+                  <Button variant="meta" className="w-full" onClick={handleRetry}>
+                    Tentar novamente
+                  </Button>
                 )}
+                {plan && (
+                  <Button variant="outline" className="w-full" onClick={() => setPhase("review")}>
+                    Voltar à revisão
+                  </Button>
+                )}
+                <Button variant="ghost" className="w-full text-muted-foreground" onClick={handleReset}>
+                  Recomeçar do zero
+                </Button>
               </div>
             </div>
           </div>

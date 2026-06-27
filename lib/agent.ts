@@ -12,8 +12,7 @@ A campanha usa CBO (Otimização de Orçamento da Campanha): o orçamento fica n
 - NÃO inclua URLs de imagem — o campo image_urls do criativo será preenchido pelo sistema. Pode omiti-lo ou deixar como []
 - Para targeting de gênero: 0=todos, 1=masculino, 2=feminino
 - Para cada público, sugira de 2 a 5 interesses relevantes baseados na descrição daquele público
-- optimization_goal compatível com o objective (TRAFFIC→LINK_CLICKS, LEADS→LEAD_GENERATION, SALES→OFFSITE_CONVERSIONS, AWARENESS→REACH, ENGAGEMENT→POST_ENGAGEMENT)
-- billing_event: sempre "IMPRESSIONS"
+- optimization_goal e billing_event são definidos AUTOMATICAMENTE pelo sistema a partir do objetivo — você pode usar "LINK_CLICKS" e "IMPRESSIONS" como valores de placeholder, NÃO escolha OFFSITE_CONVERSIONS, LEAD_GENERATION nem outros que exijam pixel/formulário
 - Se placements for automático, omita publisher_platforms/facebook_positions/instagram_positions no targeting
 - Para o Brasil use geo_locations.countries = ["BR"]; para cidades específicas use geo_locations.cities com o nome
 - Respeite a copy (título/texto/descrição/CTA/link) fornecida para cada público; apenas faça pequenos ajustes de clareza se necessário, mantendo os limites de caracteres (título 40, texto 125, descrição 30)

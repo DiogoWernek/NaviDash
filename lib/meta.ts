@@ -21,8 +21,17 @@ export interface MetaInsightsRaw {
   cpc?: string;
   ctr?: string;
   conversions?: string;
+  inline_link_clicks?: string;
   purchase_roas?: Array<{ action_type: string; value: string }>;
   actions?: Array<{ action_type: string; value: string }>;
+  action_values?: Array<{ action_type: string; value: string }>;
+  video_play_actions?: Array<{ action_type?: string; value: string }>;
+  video_p25_watched_actions?: Array<{ value: string }>;
+  video_p50_watched_actions?: Array<{ value: string }>;
+  video_p75_watched_actions?: Array<{ value: string }>;
+  video_p100_watched_actions?: Array<{ value: string }>;
+  video_thruplay_watched_actions?: Array<{ value: string }>;
+  video_avg_time_watched_actions?: Array<{ action_type?: string; value: string }>;
   date_start?: string;
   date_stop?: string;
   campaign_id?: string;
@@ -52,8 +61,17 @@ const DEFAULT_FIELDS = [
   "cpc",
   "ctr",
   "conversions",
+  "inline_link_clicks",
   "purchase_roas",
   "actions",
+  "action_values",
+  "video_play_actions",
+  "video_p25_watched_actions",
+  "video_p50_watched_actions",
+  "video_p75_watched_actions",
+  "video_p100_watched_actions",
+  "video_thruplay_watched_actions",
+  "video_avg_time_watched_actions",
 ].join(",");
 
 export async function fetchInsights(
@@ -132,8 +150,17 @@ export async function fetchCampaignInsights(
       "cpm",
       "cpc",
       "ctr",
+      "inline_link_clicks",
       "purchase_roas",
       "actions",
+      "action_values",
+      "video_play_actions",
+      "video_p25_watched_actions",
+      "video_p50_watched_actions",
+      "video_p75_watched_actions",
+      "video_p100_watched_actions",
+      "video_thruplay_watched_actions",
+      "video_avg_time_watched_actions",
     ],
   });
 }
@@ -149,8 +176,13 @@ const ADSET_FIELDS = [
   "cpm",
   "cpc",
   "ctr",
+  "inline_link_clicks",
   "purchase_roas",
   "actions",
+  "action_values",
+  "video_play_actions",
+  "video_thruplay_watched_actions",
+  "video_avg_time_watched_actions",
 ];
 
 const AD_FIELDS = [
@@ -161,11 +193,18 @@ const AD_FIELDS = [
   "impressions",
   "clicks",
   "spend",
+  "reach",
+  "frequency",
   "cpm",
   "cpc",
   "ctr",
+  "inline_link_clicks",
   "purchase_roas",
   "actions",
+  "action_values",
+  "video_play_actions",
+  "video_thruplay_watched_actions",
+  "video_avg_time_watched_actions",
 ];
 
 export async function fetchAdSetInsights(
@@ -202,23 +241,81 @@ export async function fetchAdInsights(
   });
 }
 
+export function parseRevenue(data: MetaInsightsRaw): number {
+  const actionValues = data.action_values;
+  if (actionValues) {
+    const purchase =
+      actionValues.find((a) => a.action_type === "omni_purchase") ??
+      actionValues.find((a) => a.action_type === "offsite_conversion.fb_pixel_purchase");
+    if (purchase) return parseFloat(purchase.value);
+  }
+  return 0;
+}
+
 export function parseRoas(data: MetaInsightsRaw): number {
+  // Primary: actual revenue from pixel / spend
+  const revenue = parseRevenue(data);
+  const spend = parseFloat((data.spend as string) ?? "0");
+  if (revenue > 0 && spend > 0) return revenue / spend;
+
+  // Fallback: purchase_roas field
   const purchaseRoas = data.purchase_roas?.find(
     (a) => a.action_type === "omni_purchase"
   );
   if (purchaseRoas) return parseFloat(purchaseRoas.value);
 
-  const actions = data.actions ?? [];
-  const purchases = actions.find(
-    (a) => a.action_type === "omni_purchase" || a.action_type === "purchase"
-  );
-  if (purchases && data.spend) {
-    const purchaseValue = parseFloat(purchases.value);
-    const spend = parseFloat(data.spend);
-    if (spend > 0) return purchaseValue / spend;
-  }
-
   return 0;
+}
+
+export function parseLeadsTotal(data: MetaInsightsRaw): number {
+  const actions = data.actions ?? [];
+  const LEAD_TYPES = new Set([
+    "offsite_conversion.fb_pixel_lead",
+    "onsite_conversion.lead_grouped",
+    "lead",
+    "onsite_conversion.messaging_conversation_started_7d",
+    "omni_complete_registration",
+  ]);
+  return actions
+    .filter((a) => LEAD_TYPES.has(a.action_type))
+    .reduce((sum, a) => sum + parseInt(a.value), 0);
+}
+
+export function parseLinkClicks(data: MetaInsightsRaw): number {
+  if (data.inline_link_clicks) return parseInt(data.inline_link_clicks);
+  const actions = data.actions ?? [];
+  const item = actions.find((a) => a.action_type === "link_click");
+  return item ? parseInt(item.value) : 0;
+}
+
+export function parseVideoPlay3s(data: MetaInsightsRaw): number {
+  const arr = data.video_play_actions;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
+}
+
+export function parseVideoP25(data: MetaInsightsRaw): number {
+  const arr = data.video_p25_watched_actions;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
+}
+
+export function parseVideoP50(data: MetaInsightsRaw): number {
+  const arr = data.video_p50_watched_actions;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
+}
+
+export function parseVideoP75(data: MetaInsightsRaw): number {
+  const arr = data.video_p75_watched_actions;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
+}
+
+export function parseVideoP100(data: MetaInsightsRaw): number {
+  const arr = data.video_p100_watched_actions;
+  return arr?.[0] ? parseInt(arr[0].value) : 0;
+}
+
+export function parseVideoAvgTime(data: MetaInsightsRaw): number {
+  const arr = data.video_avg_time_watched_actions;
+  return arr?.[0] ? parseFloat(arr[0].value) : 0;
 }
 
 export function parseConversions(data: MetaInsightsRaw): number {

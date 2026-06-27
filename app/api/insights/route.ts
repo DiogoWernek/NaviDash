@@ -58,7 +58,8 @@ function handleMock(accountIds: string[], startDate: string, endDate: string): N
 async function handleReal(accountIds: string[], startDate: string, endDate: string): Promise<NextResponse> {
   try {
     const { supabaseAdmin } = await import("@/lib/supabase");
-    const { fetchInsights: fetchMetaInsights, fetchBreakdown, parseRoas, parseConversionsAll } = await import("@/lib/meta");
+    const { fetchInsights: fetchMetaInsights, fetchBreakdown, parseRoas, parseConversionsAll, parseLeadsTotal, parseRevenue, parseLinkClicks, parseVideoPlay3s, parseThruPlay, parseVideoAvgTime, parseVideoP25, parseVideoP50, parseVideoP75, parseVideoP100 } = await import("@/lib/meta");
+    type MetaInsightsRaw = Awaited<ReturnType<typeof fetchMetaInsights>>[number];
 
     const startDateObj = new Date(startDate + "T00:00:00");
     const endDateObj = new Date(endDate + "T00:00:00");
@@ -88,7 +89,24 @@ async function handleReal(accountIds: string[], startDate: string, endDate: stri
           .eq("account_id", account.id)
           .gte("date", startDate)
           .lte("date", historicalEnd);
-        if (dbInsights) allInsights.push(...dbInsights);
+        if (dbInsights) {
+          for (const row of dbInsights) {
+            if (row.raw_json) {
+              const raw = row.raw_json as MetaInsightsRaw;
+              if (row.leads == null) row.leads = parseLeadsTotal(raw);
+              if (row.revenue == null) row.revenue = parseRevenue(raw);
+              if (row.link_clicks == null) row.link_clicks = parseLinkClicks(raw);
+              row.video_plays = parseVideoPlay3s(raw);
+              row.video_thruplay = parseThruPlay(raw);
+              row.video_avg_time = parseVideoAvgTime(raw);
+              row.video_p25 = parseVideoP25(raw);
+              row.video_p50 = parseVideoP50(raw);
+              row.video_p75 = parseVideoP75(raw);
+              row.video_p100 = parseVideoP100(raw);
+            }
+            allInsights.push(row);
+          }
+        }
       }
 
       // Today live from Meta API (with breakdowns in parallel)
@@ -115,6 +133,16 @@ async function handleReal(accountIds: string[], startDate: string, endDate: stri
               cpc: parseFloat(row.cpc ?? "0"),
               ctr: parseFloat(row.ctr ?? "0"),
               conversions: parseConversionsAll(row),
+              leads: parseLeadsTotal(row),
+              revenue: parseRevenue(row),
+              link_clicks: parseLinkClicks(row),
+              video_plays: parseVideoPlay3s(row),
+              video_thruplay: parseThruPlay(row),
+              video_avg_time: parseVideoAvgTime(row),
+              video_p25: parseVideoP25(row),
+              video_p50: parseVideoP50(row),
+              video_p75: parseVideoP75(row),
+              video_p100: parseVideoP100(row),
               roas: parseRoas(row),
               breakdown_platform: platformBD.map((d) => ({
                 segment: String((d as Record<string, unknown>).publisher_platform ?? "Desconhecido"),

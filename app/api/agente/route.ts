@@ -76,30 +76,55 @@ function injectImages(plan: AdPlan, formData: AgentFormData): AdPlan {
   };
 }
 
-// Objetivo Leads via Click-to-WhatsApp: a Meta exige destination_type + promoted_object
-// (página) + otimização por CONVERSAS, e o criativo precisa do CTA WHATSAPP_MESSAGE.
-// Sobrescreve o que o modelo gerou para garantir uma configuração válida.
-function applyWhatsApp(plan: AdPlan, formData: AgentFormData): AdPlan {
-  if (formData.objective !== "OUTCOME_LEADS" || !formData.whatsapp_number) return plan;
-  const digits = formData.whatsapp_number.replace(/\D/g, "");
-  if (!digits) return plan;
-  const waLink = `https://api.whatsapp.com/send?phone=${digits}`;
+// optimization_goal seguro por objetivo — escolhido para NÃO exigir pixel nem
+// formulário de lead (o que quebraria a criação do adset). Estes são valores que a
+// Meta aceita para qualquer conta, sem configuração extra.
+const OPTIMIZATION_GOAL_BY_OBJECTIVE: Record<string, string> = {
+  OUTCOME_TRAFFIC: "LINK_CLICKS",
+  OUTCOME_AWARENESS: "REACH",
+  OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT",
+  OUTCOME_SALES: "LINK_CLICKS", // sem pixel configurado → otimiza por cliques no link
+  OUTCOME_LEADS: "LINK_CLICKS", // fallback caso não seja Click-to-WhatsApp
+};
+
+// Define a configuração TÉCNICA do adset/criativo de forma DETERMINÍSTICA a partir do
+// objetivo — não confiamos nos enums que o modelo gera (ele alucina valores como
+// OFFSITE_CONVERSIONS, que exigem pixel, ou LEAD_GENERATION, que exige formulário).
+// Aqui também tratamos o Leads via Click-to-WhatsApp (CONVERSATIONS + página + CTA WA).
+function applyObjectiveConfig(plan: AdPlan, formData: AgentFormData): AdPlan {
+  const objective = formData.objective;
   const pageId = formData.facebook_page_id ?? "";
+  const waDigits = (formData.whatsapp_number ?? "").replace(/\D/g, "");
+  const isWhatsApp = objective === "OUTCOME_LEADS" && !!waDigits;
+  const waLink = isWhatsApp ? `https://api.whatsapp.com/send?phone=${waDigits}` : "";
+
   return {
     ...plan,
-    adsets: plan.adsets.map((adset) => ({
-      ...adset,
-      optimization_goal: "CONVERSATIONS",
-      billing_event: "IMPRESSIONS",
-      destination_type: "WHATSAPP",
-      promoted_object: { page_id: pageId },
-      creative: {
-        ...adset.creative,
-        call_to_action_type: "WHATSAPP_MESSAGE",
-        whatsapp_link: waLink,
-        link: adset.creative.link || waLink,
-      },
-    })),
+    campaign: { ...plan.campaign, objective },
+    adsets: plan.adsets.map((adset) => {
+      if (isWhatsApp) {
+        return {
+          ...adset,
+          optimization_goal: "CONVERSATIONS",
+          billing_event: "IMPRESSIONS",
+          destination_type: "WHATSAPP",
+          promoted_object: { page_id: pageId },
+          creative: {
+            ...adset.creative,
+            call_to_action_type: "WHATSAPP_MESSAGE",
+            whatsapp_link: waLink,
+            link: adset.creative.link || waLink,
+          },
+        };
+      }
+      return {
+        ...adset,
+        optimization_goal: OPTIMIZATION_GOAL_BY_OBJECTIVE[objective] ?? "LINK_CLICKS",
+        billing_event: "IMPRESSIONS",
+        destination_type: undefined,
+        promoted_object: undefined,
+      };
+    }),
   };
 }
 
@@ -161,7 +186,7 @@ export async function POST(req: NextRequest) {
         },
       })),
     };
-    return NextResponse.json({ plan: applyWhatsApp(mockPlan, formData), mock: true });
+    return NextResponse.json({ plan: applyObjectiveConfig(mockPlan, formData), mock: true });
   }
 
   try {
@@ -196,7 +221,7 @@ export async function POST(req: NextRequest) {
     }));
 
     plan = injectImages(plan, formData);
-    plan = applyWhatsApp(plan, formData);
+    plan = applyObjectiveConfig(plan, formData);
 
     return NextResponse.json({ plan, mock: false });
   } catch (err) {

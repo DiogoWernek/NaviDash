@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { supabaseAdmin } = await import("@/lib/supabase");
-  const { fetchInsights, fetchBreakdown, parseRoas, parseConversionsAll } = await import("@/lib/meta");
+  const { fetchInsights, fetchBreakdown, parseRoas, parseConversionsAll, parseLeadsTotal, parseRevenue } = await import("@/lib/meta");
 
   const { data: accounts, error } = await supabaseAdmin.from("ad_accounts").select("*").eq("active", true);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
             cpc: parseFloat(row.cpc ?? "0"),
             ctr: parseFloat(row.ctr ?? "0"),
             conversions: parseConversionsAll(row),
+            leads: parseLeadsTotal(row),
+            revenue: parseRevenue(row),
             roas: parseRoas(row),
             breakdown_platform: platformBD.map((d) => {
               const r = d as Record<string, unknown>;

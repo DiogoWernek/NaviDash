@@ -36,6 +36,7 @@ interface KpiCardsProps {
   previousInsights: DailyInsight[];
   loading?: boolean;
   periodLabel?: string;
+  crmRevenue?: number;
 }
 
 function sumInsights(insights: DailyInsight[]): KpiSummary {
@@ -52,6 +53,9 @@ function sumInsights(insights: DailyInsight[]): KpiSummary {
       conversions: 0,
       cpa: 0,
       frequency: 0,
+      leads: 0,
+      revenue: 0,
+      link_clicks: 0,
     };
   }
 
@@ -84,6 +88,9 @@ function sumInsights(insights: DailyInsight[]): KpiSummary {
     conversions: totalConversions,
     cpa,
     frequency: avgFrequency,
+    leads: insights.reduce((s, i) => s + (i.leads ?? 0), 0),
+    revenue: insights.reduce((s, i) => s + (i.revenue ?? 0), 0),
+    link_clicks: insights.reduce((s, i) => s + (i.link_clicks ?? 0), 0),
   };
 }
 
@@ -161,7 +168,7 @@ const KPI_DEFS = [
   {
     key: "roas" as keyof KpiSummary,
     label: "ROAS",
-    tooltip: "Retorno sobre Investimento em Anúncios. Acima de 1,0x significa retorno positivo",
+    tooltip: "Retorno sobre Investimento em Anúncios (Faturamento ÷ Gasto). Quando integrado ao Kommo, usa o faturamento real do CRM.",
     icon: BarChart2,
     format: (v: number) => v > 0 ? formatRoas(v) : "—",
     color: "text-emerald-500",
@@ -188,8 +195,14 @@ function KpiSkeleton() {
   );
 }
 
-export function KpiCards({ insights, previousInsights, loading }: KpiCardsProps) {
-  const current = useMemo(() => sumInsights(insights), [insights]);
+export function KpiCards({ insights, previousInsights, loading, crmRevenue }: KpiCardsProps) {
+  const current = useMemo(() => {
+    const base = sumInsights(insights);
+    if (crmRevenue && crmRevenue > 0 && base.spend > 0) {
+      base.roas = crmRevenue / base.spend;
+    }
+    return base;
+  }, [insights, crmRevenue]);
   const previous = useMemo(() => sumInsights(previousInsights), [previousInsights]);
 
   if (loading) {

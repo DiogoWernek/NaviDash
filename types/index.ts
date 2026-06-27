@@ -31,6 +31,16 @@ export interface DailyInsight {
   ctr: number;
   conversions: number;
   roas: number;
+  leads?: number;
+  revenue?: number;
+  link_clicks?: number;
+  video_plays?: number;
+  video_thruplay?: number;
+  video_avg_time?: number;
+  video_p25?: number;
+  video_p50?: number;
+  video_p75?: number;
+  video_p100?: number;
   breakdown_platform: BreakdownItem[];
   breakdown_device: BreakdownItem[];
   breakdown_age_gender: BreakdownItem[];
@@ -46,6 +56,8 @@ export interface BreakdownItem {
   ctr: number;
   cpm: number;
   roas: number;
+  leads?: number;
+  revenue?: number;
 }
 
 export interface Campaign {
@@ -66,6 +78,9 @@ export interface Campaign {
   reach?: number;
   conversions?: number;
   cpa?: number;
+  leads_total?: number;
+  revenue?: number;
+  link_clicks?: number;
   messaging_conversations?: number;
   cost_per_conversation?: number;
   cost_per_result?: number;
@@ -94,6 +109,9 @@ export interface AdSet {
   roas: number;
   conversions?: number;
   cpa?: number;
+  leads_total?: number;
+  revenue?: number;
+  link_clicks?: number;
   messaging_conversations?: number;
   cost_per_conversation?: number;
   cost_per_result?: number;
@@ -122,6 +140,9 @@ export interface Ad {
   roas: number;
   conversions?: number;
   cpa?: number;
+  leads_total?: number;
+  revenue?: number;
+  link_clicks?: number;
   messaging_conversations?: number;
   cost_per_conversation?: number;
   leads_form?: number;
@@ -158,6 +179,9 @@ export interface KpiSummary {
   conversions: number;
   cpa: number;
   frequency: number;
+  leads: number;
+  revenue: number;
+  link_clicks: number;
 }
 
 export interface DateRange {

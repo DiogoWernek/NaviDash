@@ -202,6 +202,16 @@ export function generateMockInsights(
     const cpm = impressions > 0 ? (spend / impressions) * 1000 : 0;
     const conversions = Math.round(clicks * (0.03 + seededRandom(seed + 4) * 0.05));
     const roas = spend > 0 ? (spend * (1.8 + seededRandom(seed + 5) * 3)) / spend : 0;
+    const leads = Math.round(clicks * (0.015 + seededRandom(seed + 6) * 0.04));
+    const revenue = Math.round(spend * (1.8 + seededRandom(seed + 7) * 2.5) * 100) / 100;
+    const link_clicks = Math.round(clicks * (0.7 + seededRandom(seed + 8) * 0.25));
+    const video_plays = Math.round(impressions * (0.4 + seededRandom(seed + 9) * 0.3));
+    const video_thruplay = Math.round(video_plays * (0.05 + seededRandom(seed + 10) * 0.10));
+    const video_p25 = Math.round(video_plays * (0.55 + seededRandom(seed + 11) * 0.2));
+    const video_p50 = Math.round(video_plays * (0.3 + seededRandom(seed + 12) * 0.2));
+    const video_p75 = Math.round(video_plays * (0.15 + seededRandom(seed + 13) * 0.1));
+    const video_p100 = Math.round(video_plays * (0.05 + seededRandom(seed + 14) * 0.08));
+    const video_avg_time = Math.round((3 + seededRandom(seed + 15) * 12) * 100) / 100;
 
     insights.push({
       id: `insight-${accountId}-${dateStr}`,
@@ -217,6 +227,16 @@ export function generateMockInsights(
       ctr: Math.round(ctr * 100) / 100,
       conversions,
       roas: Math.round(roas * 100) / 100,
+      leads,
+      revenue,
+      link_clicks,
+      video_plays,
+      video_thruplay,
+      video_avg_time,
+      video_p25,
+      video_p50,
+      video_p75,
+      video_p100,
       breakdown_platform: generatePlatformBreakdown(spend, impressions, clicks, seed),
       breakdown_device: generateDeviceBreakdown(spend, impressions, clicks, seed),
       breakdown_age_gender: generateAgeGenderBreakdown(spend, impressions, clicks, seed),
@@ -813,6 +833,7 @@ export const MOCK_CAMPAIGNS: Campaign[] = [
     roas: 2.1,
     conversions: 74,
     cpa: 25.0,
+    leads_total: 98,
     messaging_conversations: 31,
     cost_per_conversation: 59.68,
     cost_per_result: 25.00,

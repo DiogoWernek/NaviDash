@@ -23,6 +23,7 @@ interface AgentFormProps {
   adAccounts: AdAccount[];
   onSubmit: (formData: AgentFormData) => void;
   disabled?: boolean;
+  initialFormData?: AgentFormData;
 }
 
 const OBJECTIVES = [
@@ -436,11 +437,13 @@ function AudienceCard({
 
 // ── Formulário principal ────────────────────────────────────────────────────────
 
-export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: AgentFormProps) {
-  const [form, setForm] = useState<AgentFormData>(defaultForm);
+export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled, initialFormData }: AgentFormProps) {
+  const [form, setForm] = useState<AgentFormData>(initialFormData ?? defaultForm);
   const [openSection, setOpenSection] = useState(1);
   const [attempted, setAttempted] = useState(false);
-  const [budgetCents, setBudgetCents] = useState(() => Math.round(defaultForm.budget_amount * 100));
+  const [budgetCents, setBudgetCents] = useState(() =>
+    Math.round((initialFormData?.budget_amount ?? defaultForm.budget_amount) * 100)
+  );
 
   // Auto-seleciona a BM única quando ainda não há conta escolhida
   useEffect(() => {
@@ -534,7 +537,7 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
     form.objective !== "OUTCOME_LEADS" ||
     (!!form.whatsapp_number?.trim() && !!form.facebook_page_id?.trim());
 
-  const isSection1Done = form.account_ids.length > 0;
+  const isSection1Done = form.account_ids.length > 0 && !!form.facebook_page_id?.trim();
   const isSection2Done =
     !!form.campaign_name.trim() && form.budget_amount > 0 && !!form.start_date &&
     (form.budget_type !== "total" || !!form.end_date) && leadsWhatsAppOk;
@@ -597,14 +600,18 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled }: 
 
         <FieldRow
           label="ID da Página do Facebook"
-          hint="Obrigatório para criar o criativo. Encontre em: facebook.com/[sua-página]/about → ID da Página"
+          required
+          hint="Encontre em: Página do Facebook → Sobre → role até o fim → ID da Página"
         >
           <Input
             value={form.facebook_page_id ?? ""}
             onChange={(e) => set("facebook_page_id", e.target.value.replace(/\D/g, ""))}
             placeholder="Ex: 123456789012345"
-            className="h-9 text-sm font-mono"
+            className={cn("h-9 text-sm font-mono", attempted && !form.facebook_page_id?.trim() && "border-destructive")}
           />
+          {attempted && !form.facebook_page_id?.trim() && (
+            <p className="text-xs text-destructive">ID da Página é obrigatório para criar o criativo</p>
+          )}
         </FieldRow>
 
         {isSection1Done && (

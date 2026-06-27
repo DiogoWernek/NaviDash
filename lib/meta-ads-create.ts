@@ -35,13 +35,48 @@ async function metaGet(path: string, token: string, params: Record<string, strin
 }
 
 // Upload image from public URL → returns image_hash
+// Downloads the image on our server first, then POSTs as multipart binary to Meta.
+// This avoids the "Application does not have the capability" (code 3) error that
+// occurs when Meta tries to fetch images via the `url` parameter on its own servers.
 export async function uploadAdImage(
   accountId: string,
   token: string,
   imageUrl: string
 ): Promise<string> {
-  const res = await metaPost(`${accountId}/adimages`, token, { url: imageUrl });
-  const images = res.images as Record<string, { hash: string }> | undefined;
+  // 1) Download image on our server
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) throw new Error(`Falha ao baixar imagem para upload (${imgRes.status})`);
+  const imgBuffer = await imgRes.arrayBuffer();
+  const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
+  const ext = contentType.includes("png") ? "png" : "jpg";
+  const filename = `upload.${ext}`;
+
+  // 2) Upload binary to Meta via multipart/form-data (requires only ads_management)
+  const form = new FormData();
+  form.append("access_token", token);
+  form.append("filename", new Blob([imgBuffer], { type: contentType }), filename);
+
+  const res = await fetch(`${META_API}/${accountId}/adimages`, {
+    method: "POST",
+    body: form,
+  });
+
+  const json = await res.json() as Record<string, unknown>;
+  if (!res.ok || json.error) {
+    const err = json.error as {
+      message?: string; error_user_msg?: string;
+      code?: number; error_subcode?: number; fbtrace_id?: string;
+    } | undefined;
+    const base = err?.error_user_msg ?? err?.message ?? `Meta API error ${res.status}`;
+    const detail = [
+      err?.code != null ? `code ${err.code}` : null,
+      err?.error_subcode != null ? `subcode ${err.error_subcode}` : null,
+      err?.fbtrace_id ? `trace ${err.fbtrace_id}` : null,
+    ].filter(Boolean).join(", ");
+    throw new Error(detail ? `${base} (${detail})` : base);
+  }
+
+  const images = json.images as Record<string, { hash: string }> | undefined;
   if (!images) throw new Error("Resposta inesperada do upload de imagem");
   const hash = Object.values(images)[0]?.hash;
   if (!hash) throw new Error("Hash da imagem não retornado pela Meta");
@@ -49,17 +84,73 @@ export async function uploadAdImage(
 }
 
 // Search interests → returns [{id, name}]
+// IMPORTANTE: o endpoint de busca da Meta devolve campos extras
+// (audience_size_lower_bound, audience_size_upper_bound, path, topic…).
+// O spec de targeting REJEITA esses campos ("Normalization does not allow the value
+// audience_size_lower_bound"), então mantemos SOMENTE id + name.
 export async function searchInterests(
   keyword: string,
   token: string
 ): Promise<Array<{ id: string; name: string }>> {
   try {
     const res = await metaGet("search", token, { type: "adinterest", q: keyword, limit: "3" });
-    const data = (res.data as Array<{ id: string; name: string }>) ?? [];
-    return data;
+    const data = (res.data as Array<{ id: string | number; name: string }>) ?? [];
+    return data
+      .filter((d) => d?.id != null && d?.name != null)
+      .map((d) => ({ id: String(d.id), name: String(d.name) }));
   } catch {
     return [];
   }
+}
+
+// Países → códigos ISO de 2 letras. Cidades → KEY (a Meta exige key, não nome).
+const COUNTRY_NAME_TO_CODE: Record<string, string> = {
+  brasil: "BR", brazil: "BR", portugal: "PT", argentina: "AR",
+  "estados unidos": "US", "united states": "US", eua: "US", usa: "US",
+};
+
+function normalizeCountry(value: string): string | null {
+  const v = value.trim();
+  if (/^[A-Za-z]{2}$/.test(v)) return v.toUpperCase();
+  return COUNTRY_NAME_TO_CODE[v.toLowerCase()] ?? null;
+}
+
+// Garante um geo_locations 100% válido para a Meta:
+// - countries vira código ISO ("Brasil" → "BR")
+// - cities por nome são resolvidas para { key } via search (a Meta NÃO aceita nome)
+// - se nada sobrar, usa o Brasil como fallback
+async function resolveGeoLocations(
+  geo: { countries?: string[]; cities?: Array<{ name?: string; key?: string }> } | undefined,
+  token: string
+): Promise<{ countries?: string[]; cities?: Array<{ key: string }> }> {
+  const out: { countries?: string[]; cities?: Array<{ key: string }> } = {};
+
+  const countries = (geo?.countries ?? [])
+    .map(normalizeCountry)
+    .filter((c): c is string => !!c);
+
+  const cities: Array<{ key: string }> = [];
+  for (const city of geo?.cities ?? []) {
+    if (city.key) { cities.push({ key: city.key }); continue; }
+    if (!city.name) continue;
+    try {
+      const res = await metaGet("search", token, {
+        type: "adgeolocation",
+        location_types: '["city"]',
+        q: city.name,
+        limit: "1",
+      });
+      const first = (res.data as Array<{ key: string }>)?.[0];
+      if (first?.key) cities.push({ key: first.key });
+    } catch {
+      // cidade não resolvida — ignora, mantém o país
+    }
+  }
+
+  if (countries.length) out.countries = Array.from(new Set(countries));
+  if (cities.length) out.cities = cities;
+  if (!out.countries && !out.cities) out.countries = ["BR"];
+  return out;
 }
 
 // Create campaign → returns campaign_id
@@ -122,15 +213,27 @@ export async function createAdset(
     promoted_object?: { page_id?: string };
   }
 ): Promise<string> {
+  // Geo resolvido (cidades → key, países → ISO) e idade dentro dos limites da Meta (13–65)
+  const geo_locations = await resolveGeoLocations(params.targeting.geo_locations, token);
+  const ageMin = Math.max(13, Math.min(65, Math.round(params.targeting.age_min) || 18));
+  const ageMax = Math.max(ageMin, Math.min(65, Math.round(params.targeting.age_max) || 65));
+
+  // genders: [0] ou vazio = todos (a Meta exige OMITIR o campo, nunca enviar [] ou [0])
+  const g = params.targeting.genders ?? [];
+  const genders = (g.length === 0 || g.includes(0)) ? undefined : g;
+
   const targeting: Record<string, unknown> = {
-    geo_locations: params.targeting.geo_locations,
-    age_min: params.targeting.age_min,
-    age_max: params.targeting.age_max,
-    genders: params.targeting.genders[0] === 0 ? undefined : params.targeting.genders,
+    geo_locations,
+    age_min: ageMin,
+    age_max: ageMax,
+    genders,
   };
 
   if (params.targeting.resolved_interests.length > 0) {
-    targeting.flexible_spec = [{ interests: params.targeting.resolved_interests }];
+    // Defesa extra: só id + name no spec, nunca os campos de tamanho de público
+    targeting.flexible_spec = [{
+      interests: params.targeting.resolved_interests.map((it) => ({ id: String(it.id), name: it.name })),
+    }];
   }
 
   if (params.publisher_platforms) {
@@ -139,28 +242,47 @@ export async function createAdset(
     if (params.instagram_positions) targeting.instagram_positions = params.instagram_positions;
   }
 
-  const body: Record<string, unknown> = {
-    name: params.name,
-    campaign_id: campaignId,
-    billing_event: params.billing_event,
-    optimization_goal: params.optimization_goal,
-    targeting,
-    start_time: params.start_time,
-    status: "PAUSED",
+  // targeting_automation DENTRO do targeting (subcode 1870227):
+  // "defina a sinalização advantage_audience como 1 ou 0 no campo
+  //  targeting_automation na especificação de direcionamento"
+  // 0 = targeting manual (nosso caso); 1 = Advantage Audience (Meta expande sozinha)
+  // Também enviamos no nível do adset para cobrir ambas as interpretações da API.
+  targeting.targeting_automation = { advantage_audience: 0 };
+
+  const buildBody = (t: Record<string, unknown>): Record<string, unknown> => {
+    const b: Record<string, unknown> = {
+      name: params.name,
+      campaign_id: campaignId,
+      billing_event: params.billing_event,
+      optimization_goal: params.optimization_goal,
+      targeting: t,
+      targeting_automation: { advantage_audience: 0 },
+      start_time: params.start_time,
+      status: "PAUSED",
+    };
+    if (params.end_time) b.end_time = params.end_time;
+    if (params.destination_type) b.destination_type = params.destination_type;
+    if (params.promoted_object?.page_id) b.promoted_object = { page_id: params.promoted_object.page_id };
+    return b;
   };
 
-  if (params.end_time) body.end_time = params.end_time;
-
-  // Click-to-WhatsApp: destino + objeto promovido (página com WhatsApp conectado)
-  if (params.destination_type) body.destination_type = params.destination_type;
-  if (params.promoted_object?.page_id) {
-    body.promoted_object = { page_id: params.promoted_object.page_id };
+  try {
+    const res = await metaPost(`${accountId}/adsets`, token, buildBody(targeting));
+    const id = res.id as string | undefined;
+    if (!id) throw new Error("adset_id não retornado");
+    return id;
+  } catch (err) {
+    const msg = String(err instanceof Error ? err.message : err);
+    // subcode 1870247 = interesse depreciado → retry sem flexible_spec (targeting mais amplo)
+    if (msg.includes("1870247") && targeting.flexible_spec) {
+      delete targeting.flexible_spec;
+      const res = await metaPost(`${accountId}/adsets`, token, buildBody(targeting));
+      const id = res.id as string | undefined;
+      if (!id) throw new Error("adset_id não retornado");
+      return id;
+    }
+    throw err;
   }
-
-  const res = await metaPost(`${accountId}/adsets`, token, body);
-  const id = res.id as string | undefined;
-  if (!id) throw new Error("adset_id não retornado");
-  return id;
 }
 
 // Create ad creative → returns creative_id

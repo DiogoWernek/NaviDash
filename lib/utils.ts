@@ -117,6 +117,10 @@ export function getDateRange(preset: string): { from: Date; to: Date } {
       from.setDate(today.getDate() - 89);
       return { from, to: today };
     }
+    case "this_month": {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { from, to: today };
+    }
     default: {
       const from = new Date(today);
       from.setDate(today.getDate() - 29);

@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { supabaseAdmin } = await import("@/lib/supabase");
-    const { fetchInsights, fetchBreakdown, parseRoas, parseConversions } =
+    const { fetchInsights, fetchBreakdown, parseRoas, parseConversions, parseLeadsTotal, parseRevenue } =
       await import("@/lib/meta");
 
     const yesterday = new Date();
@@ -107,6 +107,8 @@ export async function POST(request: NextRequest) {
             cpc: parseFloat(row.cpc ?? "0"),
             ctr: parseFloat(row.ctr ?? "0"),
             conversions: parseConversions(row),
+            leads: parseLeadsTotal(row),
+            revenue: parseRevenue(row),
             roas: parseRoas(row),
             breakdown_platform: platformBreakdown.map((d) =>
               toRow(d, mapSegment(d, "publisher_platform"))
