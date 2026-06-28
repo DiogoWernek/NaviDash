@@ -248,6 +248,13 @@ export interface AiAnalysisData {
   profile_visits?: number;
 }
 
+export interface FacebookPage {
+  id: string;
+  name: string;
+  meta_page_id: string;
+  created_at: string;
+}
+
 // ── Agente ───────────────────────────────────────────────────────────────────
 
 export type AdObjective =

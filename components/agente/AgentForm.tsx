@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ImageUpload } from "./ImageUpload";
 import { ImageGenerator } from "./ImageGenerator";
+import { FacebookPageSelect } from "./FacebookPageSelect";
 import { cn } from "@/lib/utils";
 import type { BusinessManager, AdAccount, AgentFormData, AudienceCreative, AudienceImage } from "@/types";
 
@@ -598,19 +599,14 @@ export function AgentForm({ businessManagers, adAccounts, onSubmit, disabled, in
           {attempted && !isSection1Done && <p className="text-xs text-destructive">Selecione uma conta de anúncios</p>}
         </FieldRow>
 
-        <FieldRow
-          label="ID da Página do Facebook"
-          required
-          hint="Encontre em: Página do Facebook → Sobre → role até o fim → ID da Página"
-        >
-          <Input
+        <FieldRow label="Página do Facebook" required>
+          <FacebookPageSelect
             value={form.facebook_page_id ?? ""}
-            onChange={(e) => set("facebook_page_id", e.target.value.replace(/\D/g, ""))}
-            placeholder="Ex: 123456789012345"
-            className={cn("h-9 text-sm font-mono", attempted && !form.facebook_page_id?.trim() && "border-destructive")}
+            onChange={(pageId) => set("facebook_page_id", pageId)}
+            error={attempted && !form.facebook_page_id?.trim()}
           />
           {attempted && !form.facebook_page_id?.trim() && (
-            <p className="text-xs text-destructive">ID da Página é obrigatório para criar o criativo</p>
+            <p className="text-xs text-destructive">Selecione ou cadastre uma Página do Facebook</p>
           )}
         </FieldRow>
 
