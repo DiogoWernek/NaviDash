@@ -36,7 +36,8 @@ export function formatRoas(value: number): string {
   );
 }
 
-export function normalizeSegment(segment: string): string {
+export function normalizeSegment(segment: string | undefined | null): string {
+  if (!segment) return "Não reconhecido";
   return segment.replace(/\bunknown\b/gi, "Não reconhecido");
 }
 

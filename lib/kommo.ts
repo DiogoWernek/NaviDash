@@ -40,6 +40,86 @@ interface KommoPipelineRaw {
 }
 
 // ——— Public types ———
+export interface KommoLeadCached {
+  lead_id: number;
+  price: number;
+  status_id: number;
+  status_name: string;
+  is_won: boolean;
+  is_lost: boolean;
+  course: string;
+  source: string;
+  created_date: string;
+}
+
+export function buildDashboardFromCache(
+  leads: KommoLeadCached[],
+  metaSpend: number,
+  defaultTicketPrice = 0
+): KommoDashboardData {
+  const price = (l: KommoLeadCached) => l.price > 0 ? l.price : defaultTicketPrice;
+  const totalLeads = leads.length;
+  const wonLeads = leads.filter((l) => l.is_won);
+  const totalMatriculas = wonLeads.length;
+  const totalLost = leads.filter((l) => l.is_lost).length;
+  const totalRevenue = wonLeads.reduce((s, l) => s + price(l), 0);
+  const cpa = totalMatriculas > 0 ? metaSpend / totalMatriculas : 0;
+
+  const stageMap = new Map<string, { count: number; value: number }>();
+  for (const l of leads) {
+    const e = stageMap.get(l.status_name) ?? { count: 0, value: 0 };
+    e.count++;
+    if (l.is_won) e.value += price(l);
+    stageMap.set(l.status_name, e);
+  }
+  const byStage = Array.from(stageMap.entries())
+    .map(([stage, d]) => ({ stage, ...d }))
+    .sort((a, b) => {
+      const order = (s: string) => (s === "Ganho" ? 0 : s === "Perdido" ? 99 : 50);
+      return order(a.stage) - order(b.stage);
+    });
+
+  const courseMap = new Map<string, { leads: number; matriculas: number; revenue: number }>();
+  for (const l of leads) {
+    const e = courseMap.get(l.course) ?? { leads: 0, matriculas: 0, revenue: 0 };
+    e.leads++;
+    if (l.is_won) { e.matriculas++; e.revenue += price(l); }
+    courseMap.set(l.course, e);
+  }
+  const byCourse = Array.from(courseMap.entries())
+    .map(([course, d]) => ({
+      course, ...d,
+      cpa: d.matriculas > 0 && metaSpend > 0
+        ? (metaSpend * (d.leads / Math.max(totalLeads, 1))) / d.matriculas
+        : 0,
+    }))
+    .sort((a, b) => b.leads - a.leads);
+
+  const sourceMap = new Map<string, { count: number; matriculas: number }>();
+  for (const l of leads) {
+    const e = sourceMap.get(l.source) ?? { count: 0, matriculas: 0 };
+    e.count++;
+    if (l.is_won) e.matriculas++;
+    sourceMap.set(l.source, e);
+  }
+  const bySource = Array.from(sourceMap.entries())
+    .map(([source, d]) => ({ source, ...d }))
+    .sort((a, b) => b.count - a.count);
+
+  const dayMap = new Map<string, { leads: number; matriculas: number }>();
+  for (const l of leads) {
+    const e = dayMap.get(l.created_date) ?? { leads: 0, matriculas: 0 };
+    e.leads++;
+    if (l.is_won) e.matriculas++;
+    dayMap.set(l.created_date, e);
+  }
+  const byDay = Array.from(dayMap.entries())
+    .map(([date, d]) => ({ date, ...d }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return { totalLeads, totalMatriculas, totalLost, totalRevenue, cpa, byStage, byCourse, bySource, byDay };
+}
+
 export interface KommoDashboardData {
   totalLeads: number;
   totalMatriculas: number;

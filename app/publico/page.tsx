@@ -16,18 +16,24 @@ function aggregateBreakdown(
   for (const insight of insights) {
     for (const item of (insight[field] ?? [])) {
       const seg = normalizeSegment(item.segment);
+      const spend = Number(item.spend) || 0;
+      const impressions = Number(item.impressions) || 0;
+      const clicks = Number(item.clicks) || 0;
+      const leads = Number(item.leads) || 0;
       const ex = map.get(seg);
       if (ex) {
-        ex.impressions += item.impressions;
-        ex.clicks += item.clicks;
-        ex.spend += item.spend;
-        ex.leads = (ex.leads ?? 0) + (item.leads ?? 0);
+        ex.spend += spend;
+        ex.impressions += impressions;
+        ex.clicks += clicks;
+        ex.leads = (ex.leads ?? 0) + leads;
       } else {
-        map.set(seg, { ...item, segment: seg });
+        map.set(seg, { ...item, segment: seg, spend, impressions, clicks, leads });
       }
     }
   }
-  return Array.from(map.values()).sort((a, b) => b.impressions - a.impressions);
+  return Array.from(map.values())
+    .filter((r) => r.impressions > 0 || r.spend > 0)
+    .sort((a, b) => b.impressions - a.impressions);
 }
 
 interface DemoBarsProps {
@@ -37,8 +43,8 @@ interface DemoBarsProps {
 }
 
 function DemoBars({ rows, title, loading }: DemoBarsProps) {
-  const maxImpressions = Math.max(...rows.map((r) => r.impressions), 1);
-  const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+  const maxImpressions = rows.reduce((m, r) => (r.impressions > m ? r.impressions : m), 0) || 1;
+  const totalSpend = rows.reduce((s, r) => s + (Number(r.spend) || 0), 0);
 
   if (loading) return (
     <Card>
@@ -60,7 +66,7 @@ function DemoBars({ rows, title, loading }: DemoBarsProps) {
             {rows.map((r) => {
               const cpl = (r.leads ?? 0) > 0 ? r.spend / (r.leads ?? 1) : null;
               const spendShare = totalSpend > 0 ? (r.spend / totalSpend) * 100 : 0;
-              const barW = (r.impressions / maxImpressions) * 100;
+              const barW = Math.min((r.impressions / maxImpressions) * 100, 100);
               const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
               return (
                 <div key={r.segment}>

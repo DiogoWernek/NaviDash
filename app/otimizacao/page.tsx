@@ -16,18 +16,24 @@ function aggregateBreakdown(
   for (const insight of insights) {
     for (const item of (insight[field] ?? [])) {
       const seg = normalizeSegment(item.segment);
+      const spend = Number(item.spend) || 0;
+      const impressions = Number(item.impressions) || 0;
+      const clicks = Number(item.clicks) || 0;
+      const leads = Number(item.leads) || 0;
       const ex = map.get(seg);
       if (ex) {
-        ex.impressions += item.impressions;
-        ex.clicks += item.clicks;
-        ex.spend += item.spend;
-        ex.leads = (ex.leads ?? 0) + (item.leads ?? 0);
+        ex.spend += spend;
+        ex.impressions += impressions;
+        ex.clicks += clicks;
+        ex.leads = (ex.leads ?? 0) + leads;
       } else {
-        map.set(seg, { ...item, segment: seg });
+        map.set(seg, { ...item, segment: seg, spend, impressions, clicks, leads });
       }
     }
   }
-  return Array.from(map.values()).sort((a, b) => b.spend - a.spend);
+  return Array.from(map.values())
+    .filter((r) => r.spend > 0 || (r.impressions ?? 0) > 0)
+    .sort((a, b) => b.spend - a.spend);
 }
 
 interface BreakdownEfficiencyProps {
@@ -44,7 +50,7 @@ function BreakdownEfficiency({ title, rows, loading }: BreakdownEfficiencyProps)
     </Card>
   );
 
-  const maxSpend = Math.max(...rows.map((r) => r.spend), 1);
+  const maxSpend = rows.reduce((m, r) => (r.spend > m ? r.spend : m), 0) || 1;
 
   return (
     <Card>
@@ -55,23 +61,26 @@ function BreakdownEfficiency({ title, rows, loading }: BreakdownEfficiencyProps)
         {rows.length === 0 ? (
           <p className="text-xs text-muted-foreground py-3 text-center">Sem dados de segmentação</p>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {rows.map((r) => {
               const cpl = (r.leads ?? 0) > 0 ? r.spend / (r.leads ?? 1) : null;
               const ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
-              const barW = (r.spend / maxSpend) * 100;
+              const barW = Math.min((r.spend / maxSpend) * 100, 100);
               return (
-                <div key={r.segment} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium">{r.segment}</span>
-                    <div className="flex items-center gap-4 font-mono text-muted-foreground">
-                      <span>{formatCurrency(r.spend)}</span>
+                <div key={r.segment} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium truncate max-w-[40%]">{r.segment}</span>
+                    <div className="flex items-center gap-3 font-mono text-muted-foreground shrink-0">
+                      <span className="text-foreground">{formatCurrency(r.spend)}</span>
                       <span>{formatPercent(ctr, 1)} CTR</span>
-                      {cpl !== null && <span className="text-violet-500">{formatCurrency(cpl)} CPL</span>}
+                      {cpl !== null && <span className="text-violet-400">{formatCurrency(cpl)} CPL</span>}
                     </div>
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-meta-blue/60" style={{ width: `${barW}%` }} />
+                    <div
+                      className="h-full rounded-full bg-meta-blue/70 transition-all duration-500"
+                      style={{ width: `${barW}%` }}
+                    />
                   </div>
                 </div>
               );

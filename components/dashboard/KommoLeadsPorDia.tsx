@@ -55,7 +55,7 @@ export function KommoLeadsPorDia({ data, loading }: KommoLeadsPorDiaProps) {
         <div className="overflow-x-auto">
           <div
             className="flex items-end gap-1 min-w-0"
-            style={{ minWidth: days.length * 32, height: BAR_HEIGHT + 68 }}
+            style={{ minWidth: days.length * 32, height: BAR_HEIGHT + 110 }}
           >
             {days.map((d) => {
               const leadsH = scaleBar(d.leads, maxLeads);
