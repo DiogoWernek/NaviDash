@@ -57,13 +57,71 @@ async function handleReal(accountIds: string[], startDate: string, endDate: stri
     const { supabaseAdmin } = await import("@/lib/supabase");
 
     // ── 1. Tentar cache ─────────────────────────────────────────────────────
-    const { data: cached, error: cacheError } = await supabaseAdmin
-      .from("ad_insights_cache")
-      .select("*")
-      .in("account_id", accountIds)
-      .eq("period_start", startDate)
-      .eq("period_end", endDate)
-      .order("spend", { ascending: false });
+    // Helper para buscar cache com datas exatas
+    async function fetchCache(pStart: string, pEnd: string) {
+      return supabaseAdmin
+        .from("ad_insights_cache")
+        .select("*")
+        .in("account_id", accountIds)
+        .eq("period_start", pStart)
+        .eq("period_end", pEnd)
+        .order("spend", { ascending: false });
+    }
+
+    // Primeiro tenta match exato; se falhar, tenta versão "encerrada ontem"
+    // (o cron grava period_end = ontem, mas a UI pede endDate = hoje).
+    let { data: cached, error: cacheError } = await fetchCache(startDate, endDate);
+
+    if ((!cached || cached.length === 0) && !cacheError) {
+      const todayUTC = new Date().toISOString().split("T")[0];
+      if (endDate >= todayUTC) {
+        // endDate é hoje ou futuro — tenta a versão cacheada mais recente disponível.
+        // O cron grava period_end = ontem (relativo a quando ele rodou) e só roda 1x/dia
+        // às 09:00 UTC. Entre meia-noite e esse horário, "ontem" ainda não existe no cache
+        // — então aceitamos até STALE_TOLERANCE_DAYS de defasagem em vez de exigir match
+        // exato, pra evitar cair no fallback ao vivo (lento com centenas de anúncios).
+        const durationDays = Math.round(
+          (new Date(endDate + "T00:00:00Z").getTime() - new Date(startDate + "T00:00:00Z").getTime()) / 86400000
+        );
+        const yesterdayObj = new Date();
+        yesterdayObj.setUTCDate(yesterdayObj.getUTCDate() - 1);
+
+        const STALE_TOLERANCE_DAYS = 3;
+        const periodEndMin = new Date(yesterdayObj);
+        periodEndMin.setUTCDate(periodEndMin.getUTCDate() - STALE_TOLERANCE_DAYS);
+
+        // Janela de período_start: esperado ± 2 dias
+        const pStartExpected = new Date(yesterdayObj);
+        pStartExpected.setUTCDate(pStartExpected.getUTCDate() - durationDays);
+        const pStartMin = new Date(pStartExpected);
+        pStartMin.setUTCDate(pStartMin.getUTCDate() - 2);
+        const pStartMax = new Date(pStartExpected);
+        pStartMax.setUTCDate(pStartMax.getUTCDate() + 2);
+
+        const { data: fb, error: fbErr } = await supabaseAdmin
+          .from("ad_insights_cache")
+          .select("*")
+          .in("account_id", accountIds)
+          .lte("period_end", yesterdayObj.toISOString().split("T")[0])
+          .gte("period_end", periodEndMin.toISOString().split("T")[0])
+          .gte("period_start", pStartMin.toISOString().split("T")[0])
+          .lte("period_start", pStartMax.toISOString().split("T")[0])
+          .order("period_end", { ascending: false })
+          .order("cached_at", { ascending: false });
+
+        if (!fbErr && fb && fb.length > 0) {
+          // Pode haver mais de um snapshot por anúncio (dias diferentes cacheados) —
+          // fica só com o mais recente de cada (já vem ordenado period_end/cached_at desc).
+          const latestByAd = new Map<string, Record<string, unknown>>();
+          for (const row of fb as Record<string, unknown>[]) {
+            const key = `${row.account_id}:${row.ad_id}`;
+            if (!latestByAd.has(key)) latestByAd.set(key, row);
+          }
+          cached = Array.from(latestByAd.values());
+          cacheError = null;
+        }
+      }
+    }
 
     if (!cacheError && cached && cached.length > 0) {
       // Verifica se todos os accountIds têm dados em cache
@@ -92,6 +150,7 @@ async function handleReal(accountIds: string[], startDate: string, endDate: stri
           from_cache: true,
         }));
 
+        ads.sort((a, b) => b.spend - a.spend);
         console.log(`[ads] Cache hit: ${ads.length} anúncios para ${accountIds.join(",")} (${startDate} → ${endDate})`);
         return NextResponse.json({ ads, from_cache: true });
       }
