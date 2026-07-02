@@ -676,6 +676,7 @@ function AudienceCard({
   onChange, onRemove, onDuplicate,
 }: AudienceCardProps) {
   const a = audience;
+  const isEngagement = objective === "OUTCOME_ENGAGEMENT";
   const err = (cond: boolean) => attempted && cond;
   const showMessaging = objective === "OUTCOME_ENGAGEMENT" || objective === "OUTCOME_SALES";
 

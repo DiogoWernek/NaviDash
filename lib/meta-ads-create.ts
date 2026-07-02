@@ -362,6 +362,23 @@ export async function createAdset(
       if (!id) throw new Error("adset_id não retornado");
       return id;
     }
+    // subcode 2490408 = optimization_goal incompatível com o objetivo → tenta metas
+    // universais em ordem (REACH, depois IMPRESSIONS). Cobre casos onde a Meta
+    // muda quais metas são aceitas por objetivo.
+    if (msg.includes("2490408")) {
+      const fallbacks = ["REACH", "IMPRESSIONS"].filter((g) => g !== params.optimization_goal);
+      for (const goal of fallbacks) {
+        try {
+          const body = buildBody(targeting);
+          body.optimization_goal = goal;
+          const res = await metaPost(`${accountId}/adsets`, token, body);
+          const id = res.id as string | undefined;
+          if (id) return id;
+        } catch {
+          // tenta o próximo fallback
+        }
+      }
+    }
     throw err;
   }
 }
@@ -389,15 +406,32 @@ export async function createAdCreative(
     whatsapp_link?: string;
   }
 ): Promise<string> {
-  // Click-to-WhatsApp: o CTA aponta para o WhatsApp e o link do criativo vira o link wa.me
   const isWhatsApp = params.call_to_action_type === "WHATSAPP_MESSAGE";
-  const destLink = isWhatsApp && params.whatsapp_link ? params.whatsapp_link : params.link;
-  const callToAction = {
-    type: params.call_to_action_type,
-    value: isWhatsApp
-      ? { app_destination: "WHATSAPP", link: destLink }
-      : { link: params.link },
-  };
+  const hasLink = !!params.link?.trim();
+  // Engajamento (sem link e sem WhatsApp): post fica linkado à própria Página,
+  // sem CTA externo. Isso gera um object_story_id válido para promover no adset.
+  const isEngagement = !hasLink && !isWhatsApp;
+
+  // Link efetivo do criativo:
+  //  - WhatsApp → link wa.me
+  //  - com link  → link informado
+  //  - engajamento → URL da própria Página (não exibida como CTA)
+  const destLink = isWhatsApp && params.whatsapp_link
+    ? params.whatsapp_link
+    : hasLink
+      ? params.link
+      : `https://www.facebook.com/${params.page_id}`;
+
+  // CTA só é enviado quando há um destino real (link ou WhatsApp).
+  // Em engajamento, omitir call_to_action → post limpo, só curtir/comentar/compartilhar.
+  const callToAction = isEngagement
+    ? undefined
+    : {
+        type: params.call_to_action_type,
+        value: isWhatsApp
+          ? { app_destination: "WHATSAPP", link: destLink }
+          : { link: params.link },
+      };
 
   let objectStorySpec: Record<string, unknown>;
 
@@ -451,6 +485,25 @@ export async function createAdCreative(
   const id = res.id as string | undefined;
   if (!id) throw new Error("creative_id não retornado");
   return id;
+}
+
+// Fetch the page-post id from a creative (para promover em adsets POST_ENGAGEMENT).
+// Tenta effective_object_story_id e object_story_id; faz retry por consistência eventual.
+// Retorna "" se não encontrar (o chamador decide o fallback) — não lança.
+export async function getCreativeObjectStoryId(creativeId: string, token: string): Promise<string> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const json = await metaGet(creativeId, token, {
+        fields: "effective_object_story_id,object_story_id",
+      });
+      const storyId = (json.effective_object_story_id ?? json.object_story_id) as string | undefined;
+      if (storyId) return storyId;
+    } catch {
+      // ignora e tenta de novo
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 900));
+  }
+  return "";
 }
 
 // Create ad → returns ad_id

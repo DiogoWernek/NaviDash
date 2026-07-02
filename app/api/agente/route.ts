@@ -121,7 +121,10 @@ function injectMedia(plan: AdPlan, formData: AgentFormData): AdPlan {
 const OPTIMIZATION_GOAL_BY_OBJECTIVE: Record<string, string> = {
   OUTCOME_TRAFFIC: "LINK_CLICKS",
   OUTCOME_AWARENESS: "REACH",
-  OUTCOME_ENGAGEMENT: "POST_ENGAGEMENT",
+  // POST_ENGAGEMENT exige boost de post existente (object_story_id), que a API
+  // não retorna para criativos inline nesta conta. IMPRESSIONS é válido para
+  // OUTCOME_ENGAGEMENT, não exige promoted_object e mantém o objetivo como Engajamento.
+  OUTCOME_ENGAGEMENT: "IMPRESSIONS",
   OUTCOME_SALES: "LINK_CLICKS", // sem pixel configurado → otimiza por cliques no link
   OUTCOME_LEADS: "LINK_CLICKS", // fallback caso não seja Click-to-WhatsApp
 };
